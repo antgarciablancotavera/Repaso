@@ -1,21 +1,3 @@
-¡Excelente! Entendido perfectamente. Actuaré como tu programador de confianza para implementar estas mejoras de seguridad y acceso de una manera limpia y profesional, sin alterar el resto de tu aplicación.
-
-Tu idea de usar algo similar a las "variables de entorno" de Netlify es la correcta. Como GitHub Pages sirve archivos estáticos, no podemos usar variables de entorno del lado del servidor, pero podemos lograr el mismo efecto de una manera muy elegante: **separando la configuración en un archivo externo.**
-
-Esto nos dará dos grandes ventajas:
-1.  **Facilidad de cambio**: Podrás cambiar ambas claves (la de acceso general y la de docente) modificando un único archivo pequeño (`config.js`), sin tener que tocar el complejo `SINAPIprogresoguiado.html`.
-2.  **Seguridad**: Aunque las claves seguirán siendo visibles en el código (algo inevitable en una aplicación que se ejecuta 100% en el navegador), no estarán "quemadas" dentro de la lógica principal, haciendo su gestión mucho más limpia.
-
-### Resumen de los Cambios que Implementaremos
-
-1.  **Crearemos un archivo `config.js`**: Este archivo contendrá la clave de acceso general y la clave del docente. Será tu único punto de control para las contraseñas.
-2.  **Añadiremos un Modal de Acceso General**: Una pantalla de inicio que cubrirá toda la aplicación y pedirá una clave antes de poder usarla. Una vez introducida correctamente, no volverá a aparecer en esa sesión del navegador.
-3.  **Modificaremos el `SINAPIprogresoguiado.html`**: Para que lea las claves desde `config.js` y para que incluya el nuevo modal de acceso.
-
----
-
-### Paso 1: Crea el archivo `config.js`
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
