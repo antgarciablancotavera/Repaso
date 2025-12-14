@@ -1,15 +1,13 @@
+// Contiene la URL (aunque sea de mentira) para que el interceptor funcione
+const API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=DUMMY_KEY";
+
 // ======================================================
 // PANEL DE CONFIGURACIÓN DE CLAVES
-// Aquí puedes cambiar las contraseñas sin tocar el
-// archivo principal de la aplicación.
 // ======================================================
-
 window.APP_CONFIG = {
   // Clave para que cualquier persona (alumnos incluidos) pueda acceder a la aplicación.
-  // Cambia "ACCESO2024" por lo que tú quieras.
-  APP_ACCESS_KEY: "ACCESO2024",
+  APP_ACCESS_KEY: "AULA2024",
 
   // Clave para desbloquear el "Modo Docente" dentro de la aplicación.
-  // Cambia "PROFE_SECRETO" por la clave que desees para los profesores.
-  TEACHER_PASSWORD: "PROFE_SECRETO"
+  TEACHER_PASSWORD: "PROFE2024"
 };
