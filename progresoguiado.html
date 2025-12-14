@@ -1,0 +1,1239 @@
+¡Excelente! Entendido perfectamente. Actuaré como tu programador de confianza para implementar estas mejoras de seguridad y acceso de una manera limpia y profesional, sin alterar el resto de tu aplicación.
+
+Tu idea de usar algo similar a las "variables de entorno" de Netlify es la correcta. Como GitHub Pages sirve archivos estáticos, no podemos usar variables de entorno del lado del servidor, pero podemos lograr el mismo efecto de una manera muy elegante: **separando la configuración en un archivo externo.**
+
+Esto nos dará dos grandes ventajas:
+1.  **Facilidad de cambio**: Podrás cambiar ambas claves (la de acceso general y la de docente) modificando un único archivo pequeño (`config.js`), sin tener que tocar el complejo `SINAPIprogresoguiado.html`.
+2.  **Seguridad**: Aunque las claves seguirán siendo visibles en el código (algo inevitable en una aplicación que se ejecuta 100% en el navegador), no estarán "quemadas" dentro de la lógica principal, haciendo su gestión mucho más limpia.
+
+### Resumen de los Cambios que Implementaremos
+
+1.  **Crearemos un archivo `config.js`**: Este archivo contendrá la clave de acceso general y la clave del docente. Será tu único punto de control para las contraseñas.
+2.  **Añadiremos un Modal de Acceso General**: Una pantalla de inicio que cubrirá toda la aplicación y pedirá una clave antes de poder usarla. Una vez introducida correctamente, no volverá a aparecer en esa sesión del navegador.
+3.  **Modificaremos el `SINAPIprogresoguiado.html`**: Para que lea las claves desde `config.js` y para que incluya el nuevo modal de acceso.
+
+---
+
+### Paso 1: Crea el archivo `config.js`
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Progreso Guiado</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script>
+        MathJax = {
+            tex: { inlineMath: [['$','$'], ['\\(','\\)']], displayMath: [['$$','$$'], ['\\[','\\]']] },
+            chtml: { matchFontHeight: false },
+            startup: {
+                ready: () => {
+                    MathJax.startup.defaultReady();
+                }
+            }
+        };
+        marked.setOptions({ breaks: true, gfm: true });
+    </script>
+<style>
+    :root {
+        --app-theme-primary-color: hsl(40, 80%, 60%);
+        --app-theme-secondary-color: hsl(40, 80%, 50%);
+        --app-theme-bg-color: hsl(40, 100%, 97%);
+        --app-theme-text-on-primary: white;
+        --status-passed: #28a745;
+        --status-failed: #ff7f50; /* Coral color for failed but attempted */
+        --status-not-started: #dc3545;
+        --status-locked: #adb5bd;
+
+        --primary-font: 'Montserrat', sans-serif;
+        --accent-font: 'Playfair Display', serif;
+        --body-font: 'Inter', sans-serif; 
+        --card-bg: #ffffff;
+        --text-dark: #2c3e50;
+        --text-light-gray: #7f8c8d;
+        --border-radius-main: 12px;
+        --border-radius-small: 6px;
+        --shadow-main: 0 10px 25px rgba(0, 0, 0, 0.1);
+        --input-border-color: #ced4da;
+    }
+    body { background-color: var(--app-theme-bg-color); min-height: 100vh; display: flex; justify-content: center; align-items: flex-start; font-family: var(--body-font); color: var(--text-dark); padding: 20px; margin: 0; overflow-y: scroll; }
+    .container { position: relative; background-color: var(--card-bg); padding: 30px 40px; border-radius: var(--border-radius-main); box-shadow: var(--shadow-main); width: 100%; max-width: 1200px; text-align: center; margin: 20px 0; }
+    .container > h1.text-2xl { font-family: var(--accent-font); font-size: 2.2em; color: var(--app-theme-primary-color); margin-bottom: 1em; }
+    .container h2 { font-family: var(--accent-font); color: var(--app-theme-primary-color); margin-bottom: 0.8em; font-size: 1.8em; text-align: left; border-bottom: 1px solid #eee; padding-bottom: 0.3em; }
+    
+    .tabs-container { display: flex; border-bottom: 2px solid #e0e0e0; margin-bottom: 25px; flex-wrap: wrap; }
+    .tab-button { font-family: var(--primary-font); font-weight: 600; padding: 10px 20px; border: none; background: none; cursor: pointer; color: var(--text-light-gray); border-bottom: 3px solid transparent; transition: color 0.3s ease, border-color 0.3s ease; }
+    .tab-button.active, .tab-button:hover { color: var(--app-theme-secondary-color); }
+    .tab-button.active { border-bottom-color: var(--app-theme-primary-color); }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+    
+    .config-section { margin-bottom: 25px; text-align: left; }
+    .config-section label { display: block; font-weight: 600; margin-bottom: 8px; font-family: var(--primary-font); font-size: 0.95em; }
+    .config-section textarea, .config-section select, .config-section input[type="text"], .config-section input[type="number"], .config-section input[type="password"] { width: 100%; padding: 10px 12px; border-radius: var(--border-radius-small); border: 1px solid var(--input-border-color); box-sizing: border-box; font-size: 0.9rem; font-family: var(--primary-font); transition: border-color 0.2s ease, box-shadow 0.2s ease; }
+    .config-section .subject-checkbox-group, .config-section .checkbox-group { max-height: 200px; min-height: 100px; overflow-y: auto; border: 1px solid var(--input-border-color); padding: 10px; border-radius: var(--border-radius-small); background-color: #f8f9fa;}
+    .config-section .subject-group-title { font-weight: bold; margin-top: 10px; margin-bottom: 5px; text-decoration: underline; }
+    .config-section textarea:focus, .config-section select:focus, .config-section input[type="text"]:focus, .config-section input[type="number"]:focus, .config-section input[type="password"]:focus { outline: none; border-color: var(--app-theme-primary-color); box-shadow: 0 0 0 3px hsla(from var(--app-theme-primary-color) h s l / 0.2); }
+    .config-section .automation-buttons { display: flex; justify-content: center; gap: 10px; margin-top: 15px; }
+    #carrera-input-group, #fp-title-input-group, #teacher-carrera-input-group, #teacher-fp-title-input-group { display: none; gap: 10px; align-items: center; margin-top: 10px;}
+    .action-button, .automation-buttons button, #carrera-input-group button, #fp-title-input-group button, #add-manual-contents-button, #copy-teacher-code-button, #generate-student-report-button, #copy-student-report-button, #load-student-data-button { padding: 10px 20px; border-radius: 25px; font-weight: 600; color: var(--app-theme-text-on-primary); background-color: var(--app-theme-primary-color); cursor: pointer; transition: background-color 0.2s ease, transform 0.2s ease; border: none; font-family: var(--primary-font); }
+    .action-button:hover, .automation-buttons button:hover, #carrera-input-group button:hover, #fp-title-input-group button:hover, #add-manual-contents-button:hover, #copy-teacher-code-button:hover, #generate-student-report-button:hover, #copy-student-report-button:hover, #load-student-data-button:hover { background-color: var(--app-theme-secondary-color); transform: translateY(-1px); }
+
+    #copy-teacher-code-button, #download-teacher-template-button, #copy-student-report-button {
+        border-radius: var(--border-radius-small); padding: 8px 15px;
+    }
+
+    .message-box { position: fixed; bottom: -100px; left: 50%; transform: translateX(-50%); background-color: var(--text-dark); color: white; padding: 12px 22px; border-radius: var(--border-radius-small); z-index: 2024; opacity: 0; transition: opacity 0.5s ease, bottom 0.5s ease; pointer-events: none; }
+    .message-box.show { opacity: 1; bottom: 30px; pointer-events: auto; }
+
+    #progress-grid, #revision-progress-grid { display: grid; grid-template-columns: 2fr repeat(5, 1fr); gap: 10px; margin-top: 20px; }
+    .grid-header { font-weight: bold; text-align: center; padding: 10px; }
+    .content-label { text-align: left; padding: 10px; font-weight: 500; background: #f8f9fa; border-radius: var(--border-radius-small); display: flex; align-items: center; }
+    .level-button { padding: 8px 12px; border-radius: var(--border-radius-small); color: white; border: none; font-weight: 500; font-size: 0.9em; cursor: pointer; transition: all 0.2s ease; text-align: center; }
+    .level-button:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+    .level-button.status-passed { background-color: var(--status-passed); }
+    .level-button.status-failed { background-color: var(--status-failed); }
+    .level-button.status-not-started { background-color: var(--status-not-started); }
+    .level-button.status-locked { background-color: var(--status-locked); cursor: not-allowed; }
+
+    #quiz-modal-overlay, #revision-quiz-detail-modal-overlay { position: fixed; inset: 0; background-color: rgba(0,0,0,0.6); display: none; justify-content: center; align-items: center; z-index: 1000; }
+    #quiz-modal, #revision-quiz-detail-modal { background-color: white; padding: 30px; border-radius: var(--border-radius-main); width: 90%; max-width: 700px; box-shadow: var(--shadow-main); }
+    #quiz-modal h3, #revision-quiz-detail-modal h3 { font-family: var(--accent-font); color: var(--app-theme-primary-color); font-size: 1.5em; margin-bottom: 1em; }
+    #quiz-question, .revision-quiz-question { font-size: 1.2em; margin-bottom: 1.5em; text-align: left; }
+    #quiz-options .option-label, .revision-quiz-option { display: block; background: #f8f9fa; padding: 12px; margin-bottom: 10px; border-radius: var(--border-radius-small); border: 2px solid transparent; text-align: left; }
+    #quiz-options .option-label { cursor: pointer; transition: background-color 0.2s, border-color 0.2s; }
+    #quiz-options .option-label:hover { background-color: #e9ecef; }
+    #quiz-options input[type="radio"], .revision-quiz-option input[type="radio"] { margin-right: 10px; }
+    .revision-quiz-option.correct-answer { border-color: var(--status-passed); background-color: #eafaf1; }
+    .revision-quiz-option.user-correct { border-left: 5px solid var(--status-passed); }
+    .revision-quiz-option.user-incorrect { border-left: 5px solid var(--status-not-started); background-color: #fbeae5; }
+    #quiz-options .option-label.disabled { cursor: not-allowed; opacity: 0.7; }
+    #quiz-feedback { margin-top: 1rem; font-weight: bold; display: none; padding: 10px; border-radius: var(--border-radius-small); }
+    
+    .difficulty-config-block { margin-bottom: 15px; padding: 15px; border: 1px solid #eee; border-radius: var(--border-radius-small); }
+    .question-type-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+    .question-type-row select { flex: 2; }
+    .question-type-row input[type="number"] { flex: 1; }
+
+    .student-report-section { border-top: 2px solid var(--app-theme-primary-color); margin-top: 30px; padding-top: 20px; }
+    #revision-display-area { border: 1px solid #eee; padding: 20px; border-radius: var(--border-radius-main); margin-top: 20px; }
+    #revision-display-area h3 { font-family: var(--accent-font); color: var(--app-theme-secondary-color); font-size: 1.4em; border-bottom: 1px solid #eee; padding-bottom: 0.3em; margin-bottom: 1em; }
+
+    #activity-log-container { max-height: 200px; overflow-y: auto; border: 1px solid #eee; padding: 10px; border-radius: var(--border-radius-small); background-color: #f8f9fa; font-family: monospace; font-size: 0.9em; }
+    #activity-log-container p { margin: 0 0 5px; }
+    
+    #ai-report-output { border: 1px solid #eee; padding: 15px; margin-top: 15px; border-radius: var(--border-radius-small); background-color: #f8f9fa; text-align: left; }
+
+    #teacher-mode-button { position: absolute; top: 15px; right: 15px; font-size: 0.8rem; color: var(--text-light-gray); cursor: pointer; background: none; border: 1px solid var(--input-border-color); padding: 5px 10px; border-radius: var(--border-radius-small); transition: all 0.2s ease; }
+    #teacher-mode-button:hover { background-color: var(--app-theme-bg-color); color: var(--app-theme-secondary-color); }
+    #password-modal-overlay { position: fixed; inset: 0; background-color: rgba(0,0,0,0.6); display: none; justify-content: center; align-items: center; z-index: 2000; }
+    #password-modal { background-color: white; padding: 30px; border-radius: var(--border-radius-main); width: 90%; max-width: 400px; box-shadow: var(--shadow-main); text-align: center; }
+    #password-modal h3 { font-family: var(--accent-font); color: var(--app-theme-primary-color); font-size: 1.5em; margin-bottom: 1em; }
+    #password-modal-feedback { color: var(--status-not-started); min-height: 1.5em; margin-top: 10px; font-size: 0.9em; }
+    .teacher-only, .teacher-only-inline { display: none !important; }
+    body.teacher-mode-active .teacher-only { display: block !important; }
+    body.teacher-mode-active .tabs-container .teacher-only { display: inline-block !important; }
+    body.teacher-mode-active .teacher-only-inline { display: inline !important; }
+    body.teacher-mode-active .config-section.teacher-only, body.teacher-mode-active .automation-buttons.teacher-only { display: flex !important; flex-direction: column; }
+    body.teacher-mode-active .automation-buttons.teacher-only { flex-direction: row; }
+
+    #question-review-modal-overlay, #edit-question-modal-overlay, #regenerate-modal-overlay { position: fixed; inset: 0; background-color: rgba(0,0,0,0.6); display: none; justify-content: center; align-items: center; z-index: 1050; }
+    #question-review-modal, #edit-question-modal, #regenerate-modal { background-color: white; padding: 30px; border-radius: var(--border-radius-main); width: 95%; max-width: 900px; box-shadow: var(--shadow-main); display: flex; flex-direction: column; max-height: 90vh; }
+    #question-review-modal h3, #edit-question-modal h3, #regenerate-modal h3 { font-family: var(--accent-font); color: var(--app-theme-primary-color); font-size: 1.5em; margin-bottom: 1em; text-align: left; }
+    #review-navigation { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 15px; flex-wrap: wrap; }
+    #review-question-list { overflow-y: auto; flex-grow: 1; padding-right: 10px; }
+    #review-config-controls { padding: 10px; background-color: #f8f9fa; border-radius: var(--border-radius-small); margin-bottom: 15px; }
+    .review-config-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 5px; }
+    .review-config-row label { font-weight: 500; text-transform: capitalize; }
+    .review-config-row input[type="number"] { width: 60px; text-align: center; }
+    .review-config-row .btn-generate-missing { font-size: 0.8em; padding: 2px 8px; border-radius: var(--border-radius-small); background-color: #e9ecef; border: 1px solid #ced4da; cursor: pointer; display: none; }
+
+    .review-question-item { border: 1px solid #eee; border-radius: var(--border-radius-small); padding: 15px; margin-bottom: 10px; text-align: left; transition: border-color 0.2s ease; }
+    .review-question-item.selected { border-left: 5px solid var(--status-passed); }
+    .review-question-item .question-text { font-weight: 500; margin-bottom: 10px; }
+    .review-question-item .options-list { list-style-type: upper-alpha; padding-left: 20px; }
+    .review-question-item .correct-answer { color: var(--status-passed); font-weight: bold; margin-top: 8px; }
+    .review-question-item-actions { margin-top: 10px; display: flex; gap: 8px; align-items: center; }
+    .review-question-item-actions .action-btn { background: none; border: 1px solid var(--input-border-color); border-radius: var(--border-radius-small); padding: 4px 8px; cursor: pointer; font-size: 0.8em; transition: all 0.2s ease; }
+    .review-question-item-actions .action-btn:hover { background-color: #f1f1f1; }
+    .review-question-item-actions .action-btn.discard { color: var(--status-not-started); }
+    .review-question-item-actions .action-btn.regenerate { color: #007bff; }
+    
+    .tooltip-container { position: relative; display: inline-block; }
+    .tooltip-container .tooltip-text { visibility: hidden; width: 250px; background-color: #555; color: #fff; text-align: left; border-radius: 6px; padding: 5px 10px; position: absolute; z-index: 1; bottom: 125%; left: 50%; margin-left: -125px; opacity: 0; transition: opacity 0.3s; white-space: pre-wrap; font-size: 0.8rem; }
+    .tooltip-container .tooltip-text::after { content: ""; position: absolute; top: 100%; left: 50%; margin-left: -5px; border-width: 5px; border-style: solid; border-color: #555 transparent transparent transparent; }
+    .tooltip-container:hover .tooltip-text { visibility: visible; opacity: 1; }
+    button:disabled + .tooltip-text { display: none; }
+    
+    #edit-question-modal, #regenerate-modal { max-width: 600px; }
+    #edit-question-modal label, #regenerate-modal label { display: block; font-weight: 600; margin-bottom: 5px; text-align: left; }
+    #edit-question-modal input, #edit-question-modal textarea, #regenerate-modal textarea { width: 100%; margin-bottom: 10px; }
+    .spinner { display: inline-block; width: 1em; height: 1em; vertical-align: -0.125em; border: 0.2em solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spinner-border .75s linear infinite; }
+    @keyframes spinner-border { to { transform: rotate(360deg); } }
+
+    @media print {
+        body { background-color: white; padding: 0; margin: 0; }
+        .no-print, #teacher-mode-button { display: none !important; }
+        .printable-area { display: block !important; box-shadow: none; border: none; padding: 0; }
+        .container { box-shadow: none; width: 100%; max-width: 100%; padding: 20px; }
+        h1, h2, h3 { color: black; }
+        canvas { max-width: 500px !important; }
+        #revision-progress-grid { grid-template-columns: 2fr repeat(5, 1fr); }
+    }
+    /* --- Estilos para el Modal Manual de IA --- */
+    .modal-overlay { 
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+        background-color: rgba(0, 0, 0, 0.6); z-index: 9999; 
+        display: none; justify-content: center; align-items: center; 
+        backdrop-filter: blur(2px);
+    }
+    .modal-overlay.active { display: flex; animation: fadeIn 0.2s ease-out; }
+    .modal-box { 
+        background-color: var(--card-bg); padding: 30px; 
+        border-radius: var(--border-radius-main); box-shadow: var(--shadow-main); 
+        width: 90%; max-width: 800px; display: flex; flex-direction: column; 
+        max-height: 90vh; 
+    }
+    .modal-box textarea {
+        font-family: 'Courier New', Courier, monospace;
+        font-size: 0.9em;
+        background-color: #f8f9fa;
+        border: 1px solid var(--input-border-color);
+        border-radius: var(--border-radius-small);
+        padding: 10px;
+        margin-top: 10px;
+        resize: vertical;
+    }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+    /* --- INICIO CAMBIO: Estilos para el nuevo Modal de Acceso General --- */
+    #access-modal-overlay {
+        position: fixed;
+        inset: 0;
+        background-color: rgba(44, 62, 80, 0.85);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 9999;
+        backdrop-filter: blur(4px);
+    }
+    #access-modal {
+        background-color: var(--card-bg);
+        padding: 30px 40px;
+        border-radius: var(--border-radius-main);
+        width: 90%;
+        max-width: 450px;
+        box-shadow: var(--shadow-main);
+        text-align: center;
+    }
+    #access-modal h3 {
+        font-family: var(--accent-font);
+        color: var(--app-theme-primary-color);
+        font-size: 1.8em;
+        margin-bottom: 0.5em;
+    }
+    #access-modal-feedback {
+        color: var(--status-not-started);
+        min-height: 1.5em;
+        margin-top: 10px;
+        font-size: 0.9em;
+        font-weight: 500;
+    }
+    /* --- FIN CAMBIO --- */
+</style>
+</head>
+<body class=""> 
+    <!-- INICIO CAMBIO: Modal de Acceso General a la Aplicación -->
+    <div id="access-modal-overlay">
+        <div id="access-modal">
+            <h3>Bienvenido/a</h3>
+            <p class="text-sm text-gray-600 mb-4">Introduce la clave de acceso para continuar.</p>
+            <input type="password" id="access-key-input" class="w-full text-center" placeholder="Clave de Acceso...">
+            <div id="access-modal-feedback"></div>
+            <div class="text-center mt-6">
+                <button id="submit-access-key-button" class="action-button">Entrar</button>
+            </div>
+        </div>
+    </div>
+    <!-- FIN CAMBIO -->
+
+    <div id="message-box" class="message-box"></div>
+    <input type="file" id="load-progress-input" accept=".json" style="display: none;">
+    <input type="file" id="load-student-file-input" accept=".json" style="display: none;">
+    <input type="file" id="load-teacher-template-input" accept=".json" style="display: none;">
+
+    <div class="container">
+        <button id="teacher-mode-button" class="no-print"><i class="fas fa-lock mr-2"></i>Modo Docente</button>
+        <h1 class="text-2xl">Progreso Guiado</h1>
+        <div class="tabs-container no-print">
+            <button class="tab-button active" data-target="ruta-tab">Ruta de Aprendizaje</button>
+            <button class="tab-button teacher-only" data-target="docente-tab">Configuración para Docentes</button>
+            <button class="tab-button" data-target="stats-tab">Mis Estadísticas</button>
+            <button class="tab-button teacher-only" data-target="revision-tab">Revisión para Docentes</button>
+        </div>
+
+        <div id="ruta-tab" class="tab-content active">
+            <h2>Mi Ruta de Estudio</h2>
+            <div class="config-section teacher-only"><label for="level">Nivel Base:</label><select id="level"><option value="1_primaria">1º Primaria</option><option value="2_primaria">2º Primaria</option><option value="3_primaria">3º Primaria</option><option value="4_primaria">4º Primaria</option><option value="5_primaria">5º Primaria</option><option value="6_primaria">6º Primaria</option><option value="1_eso">1º ESO</option><option value="2_eso" selected>2º ESO</option><option value="3_eso">3º ESO</option><option value="4_eso">4º ESO</option><option value="fp_basica">FP Básica</option><option value="fp_grado_medio">FP Grado Medio</option><option value="1_bachillerato">1º Bachillerato</option><option value="2_bachillerato">2º Bachillerato</option><option value="fp_grado_superior">FP Grado Superior</option><option value="universidad">Universidad</option></select></div>
+            <div class="config-section teacher-only"><label>Asignaturas / Módulos:</label><div id="subjects-area" class="subject-checkbox-group mb-2"></div><div id="carrera-input-group" class="mt-2"><input type="text" id="custom-carrera-name" placeholder="Nombre de la carrera universitaria"><button id="populate-university-subjects-button" class="action-button text-sm py-2 px-4 rounded-full">Buscar Asignaturas</button></div><div id="fp-title-input-group" class="mt-2"><input type="text" id="custom-fp-title-name" placeholder="Título/Familia Profesional de FP"><button id="populate-fp-modules-button" class="action-button text-sm py-2 px-4 rounded-full">Buscar Módulos</button></div><input type="text" id="custom-subject-name" placeholder="Nombre de asignatura personalizada ('Otras' seleccionada)" class="mt-2" style="display:none;"></div>
+            <div class="config-section teacher-only"><label>Contenidos a Estudiar:</label><div id="topics-area" class="checkbox-group"></div><p class="mt-3 mb-1 text-sm text-gray-600 text-left"><b>Añadir Contenidos Manualmente:</b> Escribe aquí contenidos adicionales, uno por línea. Usa el formato "Asignatura: Tema" o "Asignatura: Tema: Apartado".</p><textarea id="custom-contents-area" rows="4" class="w-full" placeholder="Ej: Matemáticas: Teorema de Pitágoras..."></textarea><div class="text-right mt-2"><button id="add-manual-contents-button" class="action-button text-sm py-2 px-4" style="background-color: var(--status-passed);">Añadir Contenidos Manuales</button></div><div class="automation-buttons"><button id="automate-exhaustive-get-contents-button" class="action-button text-sm py-2 px-4 rounded-full">Búsqueda Exhaustiva de Contenidos (IA)</button><button id="copy-student-contents-button" class="action-button text-sm py-2 px-4 rounded-full" style="background-color: #3498db;"><i class="fas fa-copy mr-2"></i>Copiar Contenidos</button></div></div>
+            <div class="config-section"><label for="teacher-code-input">Código del Profesor<span class="teacher-only-inline"> (Opcional)</span>:</label><input type="text" id="teacher-code-input" placeholder="Pega aquí el código o carga el archivo de plantilla del profesor..."><button id="automate-exercises-button" class="action-button text-sm py-2 px-4 rounded-full mt-2 teacher-only">O, automatizar selección de ejercicios</button></div>
+            <div class="config-section text-center"><div class="flex justify-center gap-4"><button id="save-progress-button" class="action-button text-sm py-2 px-4 rounded-full" style="background-color: var(--status-passed);"><i class="fas fa-save mr-2"></i>Guardar Progreso</button><button id="load-progress-button" class="action-button text-sm py-2 px-4 rounded-full" style="background-color: #555;"><i class="fas fa-upload mr-2"></i>Cargar Progreso/Plantilla</button><button id="reset-button" class="action-button text-sm py-2 px-4 rounded-full" style="background-color: var(--status-not-started);"><i class="fas fa-trash mr-2"></i>Limpiar/Reiniciar</button></div></div>
+            <div id="progress-grid-container"><div id="progress-grid"></div></div>
+            <div class="student-report-section"><h2>Generar Reporte para el Profesor</h2><div class="config-section"><label for="student-name-input">Tu Nombre Completo:</label><input type="text" id="student-name-input" placeholder="Escribe tu nombre aquí..."></div><div class="text-center"><button id="generate-student-report-button" class="action-button">Generar Código de Reporte</button></div><div id="student-report-output-area" class="mt-4" style="display: none;"><label for="student-report-code" class="block font-semibold mb-2 text-left">Código de Reporte (Copia y entrega a tu profesor):</label><textarea id="student-report-code" readonly rows="4" class="w-full"></textarea><div class="text-right mt-2"><button id="copy-student-report-button"><i class="fas fa-copy mr-2"></i>Copiar Reporte</button></div></div></div>
+        </div>
+
+        <div id="docente-tab" class="tab-content">
+            <h2>Crear Plantilla de Evaluación</h2>
+            <div class="border p-4 rounded-lg mb-6"><h3 class="text-xl font-bold mb-3 text-left" style="color: var(--app-theme-secondary-color);">Paso 1: Seleccionar Contenidos para la Plantilla</h3><div class="config-section"><label for="teacher-level">Nivel Base:</label><select id="teacher-level"><option value="1_primaria">1º Primaria</option><option value="2_primaria">2º Primaria</option><option value="3_primaria">3º Primaria</option><option value="4_primaria">4º Primaria</option><option value="5_primaria">5º Primaria</option><option value="6_primaria">6º Primaria</option><option value="1_eso">1º ESO</option><option value="2_eso" selected>2º ESO</option><option value="3_eso">3º ESO</option><option value="4_eso">4º ESO</option><option value="fp_basica">FP Básica</option><option value="fp_grado_medio">FP Grado Medio</option><option value="1_bachillerato">1º Bachillerato</option><option value="2_bachillerato">2º Bachillerato</option><option value="fp_grado_superior">FP Grado Superior</option><option value="universidad">Universidad</option></select></div><div class="config-section"><label>Asignaturas / Módulos:</label><div id="teacher-subjects-area" class="subject-checkbox-group mb-2"></div><div id="teacher-carrera-input-group" class="mt-2"><input type="text" id="teacher-custom-carrera-name" placeholder="Nombre de la carrera universitaria"><button id="teacher-populate-university-subjects-button" class="action-button text-sm py-2 px-4 rounded-full">Buscar Asignaturas</button></div><div id="teacher-fp-title-input-group" class="mt-2"><input type="text" id="teacher-custom-fp-title-name" placeholder="Título/Familia Profesional de FP"><button id="teacher-populate-fp-modules-button" class="action-button text-sm py-2 px-4 rounded-full">Buscar Módulos</button></div><input type="text" id="teacher-custom-subject-name" placeholder="Nombre de asignatura personalizada ('Otras' seleccionada)" class="mt-2" style="display:none;"></div><div class="config-section"><label>Contenidos a Incluir en la Plantilla:</label><div id="teacher-topics-area" class="checkbox-group"></div><p class="mt-3 mb-1 text-sm text-gray-600 text-left"><b>Añadir Contenidos Manualmente:</b></p><textarea id="teacher-custom-contents-area" rows="3" class="w-full" placeholder="Ej: Matemáticas: Polinomios"></textarea><div class="automation-buttons"><button id="teacher-automate-exhaustive-get-contents-button" class="action-button text-sm py-2 px-4 rounded-full">Búsqueda Exhaustiva de Contenidos (IA)</button></div></div></div>
+            <div class="border p-4 rounded-lg"><h3 class="text-xl font-bold mb-3 text-left" style="color: var(--app-theme-secondary-color);">Paso 2: Configurar la Evaluación</h3><div class="grid grid-cols-1 md:grid-cols-2 gap-4"><div class="config-section"><label for="passing-score">Nota para Aprobar (sobre 10):</label><input type="number" id="passing-score" value="5" min="0" max="10" step="0.1"></div><div class="config-section"><label for="max-score">Puntuación Máxima del Test:</label><input type="number" id="max-score" value="10" min="1"></div><div class="config-section"><label for="penalty-score">Penalización por Fallo (0 para no restar):</label><input type="number" id="penalty-score" value="0" min="0" max="1" step="0.1"></div></div><div id="difficulty-configs-container"></div></div>
+            <div class="text-center mt-6 flex flex-wrap justify-center gap-4">
+                <button id="load-fixed-template-button" class="action-button" style="background-color: #28a745;"><i class="fas fa-upload mr-2"></i>Cargar Borrador/Plantilla</button>
+                <button id="start-template-creation-button" class="action-button">Crear Plantilla Fija</button>
+                <button id="generate-dynamic-template-button" class="action-button" style="background-color: #3498db;">Generar Plantilla Dinámica</button>
+            </div>
+            <div id="generated-code-area" class="mt-4" style="display: none;"><label for="output-teacher-code" class="block font-semibold mb-2 text-left">Código/Plantilla Generada:</label><textarea id="output-teacher-code" readonly rows="3" class="w-full"></textarea><div class="text-right mt-2 flex gap-2 justify-end"><button id="copy-teacher-code-button"><i class="fas fa-copy mr-2"></i>Copiar Código</button><button id="download-teacher-template-button"><i class="fas fa-download mr-2"></i>Descargar Plantilla (.json)</button></div></div>
+        </div>
+
+        <div id="stats-tab" class="tab-content"><h2>Mis Estadísticas de Progreso</h2><div class="config-section"><label for="stats-difficulty-select">Selecciona un nivel de dificultad para comparar tu progreso:</label><select id="stats-difficulty-select"></select></div><div class="flex justify-center gap-4 my-4"><button id="set-chart-radar" class="action-button text-sm py-2 px-4 rounded-full">Gráfico de Araña</button><button id="set-chart-bar" class="action-button text-sm py-2 px-4 rounded-full">Gráfico de Barras</button></div><div style="position: relative; height:40vh; width:80vw; max-width:600px; margin: auto;"><canvas id="stats-chart"></canvas></div></div>
+
+        <div id="revision-tab" class="tab-content">
+            <h2 class="no-print">Revisión de Progreso del Alumno</h2>
+            <div class="config-section text-center no-print"><label>Carga el archivo de progreso (.json) del alumno:</label><button id="load-student-file-button" class="action-button"><i class="fas fa-upload mr-2"></i>Seleccionar Archivo del Alumno</button></div>
+            <div class="config-section no-print"><label for="student-code-paste-area" class="text-sm text-gray-600">O pega aquí el código de reporte del alumno:</label><textarea id="student-code-paste-area" rows="4" class="w-full" placeholder="El código del alumno empieza por ey..."></textarea><div class="text-center mt-2"><button id="load-student-data-button" class="action-button text-sm py-2 px-4 rounded-full">Cargar desde Código</button></div></div>
+            
+            <div id="revision-display-area" class="mt-6 printable-area" style="display: none;">
+                <button id="print-report-button" class="action-button no-print absolute top-4 right-4"><i class="fas fa-print mr-2"></i>Imprimir Informe</button>
+                <div id="revision-student-info" class="mb-4 text-left"><p><strong>Alumno:</strong> <span id="revision-student-name"></span></p><p><strong>Nivel:</strong> <span id="revision-level"></span></p><p><strong>Asignaturas:</strong> <span id="revision-subjects"></span></p></div>
+                <h3>Resultados del Alumno</h3><div id="revision-progress-grid-container"><div id="revision-progress-grid"></div></div>
+                <div class="mt-6"><h3>Registro de Actividad</h3><div id="activity-log-container"></div></div>
+                <div class="mt-6"><h3>Visualización del Progreso</h3><div class="config-section no-print"><label for="revision-difficulty-select">Selecciona un nivel de dificultad para visualizar:</label><select id="revision-difficulty-select"></select></div><div class="flex justify-center gap-4 my-4 no-print"><button id="set-revision-chart-radar" class="action-button text-sm py-2 px-4 rounded-full">Gráfico de Araña</button><button id="set-revision-chart-bar" class="action-button text-sm py-2 px-4 rounded-full">Gráfico de Barras</button></div><div style="position: relative; height:40vh; width:80vw; max-width:600px; margin: auto;"><canvas id="revision-chart-canvas"></canvas></div></div>
+                <div class="mt-6"><h3>Configuración del Test Aplicada</h3><div id="revision-config-details" class="text-left p-4 bg-gray-100 rounded-lg"></div></div>
+                
+                <div id="ai-analysis-section" class="mt-6">
+                    <h3>Informe del Alumno</h3>
+                    <div class="config-section no-print">
+                        <div class="flex items-center justify-between mb-2">
+                            <label for="ai-report-instructions" class="mb-0">Indicaciones Adicionales para la IA (Opcional):</label>
+                            <label class="text-sm flex items-center cursor-pointer">
+                                <input type="checkbox" id="include-activity-log-checkbox" class="mr-2">
+                                Incluir Registro de Actividad
+                            </label>
+                        </div>
+                        <textarea id="ai-report-instructions" rows="3" placeholder="Ej: Enfócate en los errores conceptuales. Redacta el informe en un tono encouraging."></textarea>
+                    </div>
+                    <div class="text-center no-print">
+                        <button id="generate-ai-report-button" class="action-button">Generar Informe</button>
+                    </div>
+                    <div id="ai-report-output" class="mt-4"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="quiz-modal-overlay"><div id="quiz-modal"><h3 id="quiz-title">Prueba de Nivel</h3><div id="quiz-progress" class="text-right text-sm mb-4"></div><div id="quiz-question"></div><div id="quiz-options"></div><div id="quiz-feedback"></div><div class="text-center mt-6"><button id="submit-quiz-answer-button" class="action-button">Enviar Respuesta</button><button id="next-quiz-question-button" class="action-button" style="display: none;">Siguiente</button></div></div></div>
+    <div id="password-modal-overlay"><div id="password-modal"><h3>Acceso para Docentes</h3><p class="text-sm text-gray-600 mb-4">Introduce la contraseña para desbloquear las herramientas de configuración y revisión.</p><input type="password" id="password-input" class="w-full" placeholder="Contraseña..."><div id="password-modal-feedback"></div><div class="text-center mt-6"><button id="submit-password-button" class="action-button">Entrar</button></div></div></div>
+    <div id="question-review-modal-overlay"><div id="question-review-modal"><h3>Revisión de Preguntas</h3><div id="review-navigation"><div class="flex-grow"><label for="review-content-select">Contenido:</label><select id="review-content-select"></select></div><div class="flex-grow"><label for="review-difficulty-select-nav">Dificultad:</label><select id="review-difficulty-select-nav"></select></div></div><div id="review-config-controls"></div><div id="review-question-list"></div><div class="text-center mt-6 flex flex-wrap justify-center gap-4"><button id="save-draft-template-button" class="action-button" style="background-color: #f39c12;"><i class="fas fa-save mr-2"></i>Guardar Borrador</button><div class="tooltip-container" id="finalize-button-container"><button id="finalize-template-fixed-button" class="action-button" disabled>Generar Plantilla Fija</button></div><button id="close-review-modal-button" class="action-button" style="background-color: #7f8c8d;">Cerrar</button></div></div></div>
+    <div id="edit-question-modal-overlay"><div id="edit-question-modal"><h3>Editar Pregunta</h3><form id="edit-question-form"><div><label for="edit-question-text">Pregunta:</label><textarea id="edit-question-text" rows="3" required></textarea></div><div><label for="edit-options-text">Opciones (una por línea):</label><textarea id="edit-options-text" rows="4" required></textarea></div><div><label for="edit-answer-text">Respuesta Correcta (texto exacto de una de las opciones):</label><input type="text" id="edit-answer-text" required></div><div class="text-right mt-4"><button type="submit" class="action-button">Guardar Cambios</button></div></form></div></div>
+    <div id="regenerate-modal-overlay"><div id="regenerate-modal"><h3>Regenerar Pregunta con IA</h3><div><label for="regenerate-prompt-text">Indicaciones para la IA (opcional):</label><textarea id="regenerate-prompt-text" rows="6"></textarea></div><div class="text-right mt-4"><button id="confirm-regenerate-button" class="action-button">Generar Nueva Pregunta</button></div></div></div>
+    <div id="revision-quiz-detail-modal-overlay"><div id="revision-quiz-detail-modal"><h3>Detalle del Intento</h3><div id="revision-quiz-detail-content" class="max-h-[70vh] overflow-y-auto"></div></div></div>
+<!-- ======================= MODAL MANUAL IA ======================= -->
+<div id="manual-ai-modal" class="modal-overlay">
+    <div class="modal-box">
+        <!-- Usamos el color secundario del tema para el título -->
+        <h2 class="text-xl font-bold mb-3" style="color: var(--app-theme-secondary-color); font-family: var(--accent-font);">Procesamiento Manual de IA</h2>
+        <div class="bg-blue-50 border-l-4 border-blue-500 p-4 mb-4 text-left">
+            <p class="font-bold text-blue-700">¡Prompt copiado al portapapeles!</p>
+            <p class="text-sm text-blue-600 mt-1">
+                1. Ve a tu IA (ChatGPT, Claude, etc.) y pega el texto (Ctrl+V).<br>
+                2. Copia la respuesta generada.<br>
+                3. Pégala abajo y pulsa "Confirmar".
+            </p>
+        </div>
+        <div class="flex-grow flex flex-col text-left">
+            <label for="manual-ai-input" class="font-semibold">Respuesta de la IA:</label>
+            <textarea id="manual-ai-input" rows="10" class="w-full flex-grow" placeholder="Pega aquí la respuesta..."></textarea>
+        </div>
+        <div class="flex justify-end gap-4 mt-4">
+            <button id="manual-ai-cancel-btn" class="action-button" style="background-color: #6c757d;">Cancelar</button>
+            <button id="manual-ai-confirm-btn" class="action-button" style="background-color: var(--app-theme-primary-color);">Confirmar y Procesar</button>
+        </div>
+    </div>
+</div>
+<script src="config.js"></script>
+<script>
+// --- INICIO CAMBIO: Lógica para el Acceso General y Claves desde config.js ---
+    function checkAccessKey() {
+        const accessKeyInput = document.getElementById('access-key-input');
+        const feedback = document.getElementById('access-modal-feedback');
+        // Leemos la clave desde el objeto global window.APP_CONFIG creado por config.js
+        if (accessKeyInput.value === window.APP_CONFIG.APP_ACCESS_KEY) {
+            document.getElementById('access-modal-overlay').style.display = 'none';
+            // Guardamos en la sesión del navegador que el acceso ha sido concedido
+            sessionStorage.setItem('appAccessed', 'true');
+        } else {
+            feedback.textContent = 'Clave de acceso incorrecta.';
+            accessKeyInput.value = '';
+        }
+    }
+
+    function initializeAccessControl() {
+        // Si el usuario ya ha accedido en esta sesión, no mostramos el modal
+        if (sessionStorage.getItem('appAccessed') === 'true') {
+            document.getElementById('access-modal-overlay').style.display = 'none';
+        } else {
+            document.getElementById('access-modal-overlay').style.display = 'flex';
+        }
+
+        // Añadimos los eventos para el formulario de acceso
+        document.getElementById('submit-access-key-button').addEventListener('click', checkAccessKey);
+        document.getElementById('access-key-input').addEventListener('keyup', (e) => {
+            if (e.key === 'Enter') checkAccessKey();
+        });
+    }
+// --- FIN CAMBIO ---
+
+// --- SISTEMA DE INTERCEPCIÓN MANUAL DE IA ---
+    (function() {
+        const manualModal = document.getElementById('manual-ai-modal');
+        const manualInput = document.getElementById('manual-ai-input');
+        const manualConfirmBtn = document.getElementById('manual-ai-confirm-btn');
+        const manualCancelBtn = document.getElementById('manual-ai-cancel-btn');
+        let manualResolve = null;
+        let manualReject = null;
+
+        // 1. Función para mostrar el modal y esperar respuesta
+        async function getManualAIResponse(promptText) {
+            return new Promise((resolve, reject) => {
+                // Copiar al portapapeles
+                navigator.clipboard.writeText(promptText).then(() => {
+                    console.log("Prompt copiado");
+                }).catch(err => console.error("Error al copiar", err));
+
+                manualInput.value = '';
+                manualModal.classList.add('active'); // Usamos la clase active definida en CSS
+                manualModal.style.display = 'flex'; // Aseguramos display flex por si acaso
+                manualInput.focus();
+                
+                manualResolve = resolve;
+                manualReject = reject;
+            });
+        }
+
+        // 2. Event Listeners del Modal
+        if (manualConfirmBtn) {
+            manualConfirmBtn.addEventListener('click', () => {
+                const text = manualInput.value.trim();
+                if (!text) { alert("Por favor, pega la respuesta."); return; }
+                manualModal.classList.remove('active');
+                manualModal.style.display = 'none';
+                if (manualResolve) manualResolve(text);
+            });
+        }
+
+        if (manualCancelBtn) {
+            manualCancelBtn.addEventListener('click', () => {
+                manualModal.classList.remove('active');
+                manualModal.style.display = 'none';
+                if (manualReject) manualReject(new Error("Usuario canceló la operación manual."));
+            });
+        }
+
+        // 3. INTERCEPTOR DE FETCH
+        const originalFetch = window.fetch;
+        window.fetch = async function(url, options) {
+            // Detectar si es una llamada a la API de IA (estructura típica de Gemini)
+            if (options && options.method === 'POST' && options.body) {
+                try {
+                    const body = JSON.parse(options.body);
+                    // Verificamos si tiene la estructura { contents: [{ parts: [{ text: ... }] }] }
+                    if (body.contents && body.contents[0] && body.contents[0].parts && body.contents[0].parts[0].text) {
+                        
+                        const prompt = body.contents[0].parts[0].text;
+                        
+                        // PAUSAR y pedir input manual
+                        try {
+                            const manualResponseText = await getManualAIResponse(prompt);
+
+                            // Crear una respuesta simulada
+                            const mockResponse = {
+                                ok: true,
+                                status: 200,
+                                json: async () => ({
+                                    candidates: [{
+                                        content: {
+                                            parts: [{ text: manualResponseText }]
+                                        }
+                                    }]
+                                }),
+                                text: async () => JSON.stringify({ /* dummy text */ })
+                            };
+
+                            return mockResponse;
+
+                        } catch (error) {
+                            // Si cancela, lanzamos error para que la UI lo maneje (ocultar spinners, etc.)
+                            throw error;
+                        }
+                    }
+                } catch (e) {
+                    // Si no es un JSON de IA, ignoramos y hacemos fetch normal
+                    if (e.message === "Usuario canceló la operación manual.") throw e;
+                }
+            }
+
+            // Si no es una llamada a la IA, dejar que pase normalmente
+            return originalFetch.apply(this, arguments);
+        };
+    })();
+    // --- FIN SISTEMA MANUAL ---
+    
+    // --- INICIO CAMBIO: Se elimina la constante de la contraseña. Ahora se leerá de config.js ---
+    // const TEACHER_PASSWORD = "PROFE2024"; // <-- LÍNEA ELIMINADA
+    // --- FIN CAMBIO ---
+
+    function activateTeacherMode() { document.body.classList.add('teacher-mode-active'); document.getElementById('password-modal-overlay').style.display = 'none'; const teacherModeButton = document.getElementById('teacher-mode-button'); teacherModeButton.innerHTML = `<i class="fas fa-lock-open mr-2"></i>Salir Modo Docente`; sessionStorage.setItem('teacherModeActive', 'true'); showMessage('Modo Docente activado.', 'success'); }
+    function activateStudentMode() { document.body.classList.remove('teacher-mode-active'); const teacherModeButton = document.getElementById('teacher-mode-button'); teacherModeButton.innerHTML = `<i class="fas fa-lock mr-2"></i>Modo Docente`; sessionStorage.removeItem('teacherModeActive'); const activeTab = document.querySelector('.tab-button.active'); if (activeTab && activeTab.classList.contains('teacher-only')) { document.querySelector('.tab-button[data-target="ruta-tab"]').click(); } }
+    function checkPassword() { const passwordInput = document.getElementById('password-input'); const feedback = document.getElementById('password-modal-feedback'); 
+        // --- INICIO CAMBIO: Comparamos con la clave de config.js en lugar de la constante ---
+        if (passwordInput.value === window.APP_CONFIG.TEACHER_PASSWORD) { 
+        // --- FIN CAMBIO ---
+            activateTeacherMode(); passwordInput.value = ''; feedback.textContent = ''; 
+        } else { 
+            feedback.textContent = 'Contraseña incorrecta.'; passwordInput.value = ''; 
+        } 
+    }
+    function initializeMode() { if (sessionStorage.getItem('teacherModeActive') === 'true') { activateTeacherMode(); } else { activateStudentMode(); } }
+
+    const simulatedCurriculum = { "1_primaria": { subjects: ["Lengua Castellana y Literatura", "Matemáticas", "Ciencias de la Naturaleza", "Ciencias Sociales", "Otras"], contents: { "Matemáticas": { "Los números del 1 al 100": [], "Sumas y restas sin llevada": [] }, "Lengua Castellana y Literatura": { "El abecedario": [], "Las sílabas": [] } } }, "2_primaria": { subjects: ["Lengua Castellana y Literatura", "Matemáticas", "Ciencias de la Naturaleza", "Ciencias Sociales", "Otras"], contents: { "Matemáticas": { "Tablas de multiplicar": [], "Problemas de suma y resta": [] }, "Ciencias de la Naturaleza": { "Seres vivos y seres inertes": [], "El ciclo del agua": [] } } }, "3_primaria": { subjects: ["Lengua Castellana y Literatura", "Matemáticas", "Ciencias de la Naturaleza", "Ciencias Sociales", "Otras"], contents: { "Matemáticas": { "Fracciones": [], "Cuerpos geométricos": [] }, "Ciencias Sociales": { "El relieve de España": [], "La organización territorial": [] } } }, "4_primaria": { subjects: ["Lengua Castellana y Literatura", "Matemáticas", "Ciencias de la Naturaleza", "Ciencias Sociales", "Otras"], contents: { "Matemáticas": { "Números decimales": [], "Área y perímetro": [] }, "Geografía e Historia": { "La Prehistoria": [], "La Edad Antigua": [] } } }, "5_primaria": { subjects: ["Lengua Castellana y Literatura", "Matemáticas", "Ciencias de la Naturaleza", "Ciencias Sociales", "Otras"], contents: { "Matemáticas": { "Porcentajes": [], "Estadística y probabilidad": [] }, "Geografía e Historia": { "Los continentes": [], "Climas del mundo": [] } } }, "6_primaria": { subjects: ["Lengua Castellana y Literatura", "Matemáticas", "Ciencias de la Naturaleza", "Ciencias Sociales", "Otras"], contents: { "Matemáticas": { "Proporcionalidad": [], "Números enteros": [] }, "Geografía e Historia": { "La Edad Media": [], "La Edad Moderna": [] } } }, "1_eso": { subjects: ["Matemáticas", "Lengua Castellana y Literatura", "Biología y Geología", "Geografía e Historia", "Física y Química", "Tecnología", "Otras"], contents: { "Matemáticas": { "Números Enteros": ["Concepto y representación", "Suma y resta", "Multiplicación y división"], "Fracciones": ["Concepto de fracción", "Fracciones equivalentes", "Operaciones"] }, "Biología y Geología": { "La Célula": ["Tipos de célula", "Orgánulos celulares"] } } }, "2_eso": { subjects: ["Matemáticas", "Lengua Castellana y Literatura", "Biología y Geología", "Física y Química", "Geografía e Historia", "Educación Física", "Música", "Tecnología", "Educación Plástica, Visual y Audiovisual", "Lengua Extranjera", "Otras"], contents: { "Matemáticas": { "Potencias y Raíces": ["Potencias de exponente entero", "Raíces cuadradas"], "Álgebra": ["Lenguaje algebraico", "Monomios y polinomios", "Ecuaciones de primer grado"] } } }, "3_eso": { subjects: ["Matemáticas Orientadas a las Enseñanzas Académicas", "Matemáticas Orientadas a las Enseñanzas Aplicadas", "Lengua Castellana y Literatura", "Biología y Geología", "Geografía e Historia", "Física y Química", "Otras"], contents: {} }, "4_eso": { subjects: ["Matemáticas A", "Matemáticas B", "Lengua Castellana y Literatura", "Biología y Geología", "Geografía e Historia", "Física y Química", "Latín", "Otras"], contents: {} }, "1_bachillerato": { subjects: [ "Lengua Castellana y Literatura I", "Filosofía I", "Matemáticas I", "Física y Química", "Biología, Geología y Ciencias Ambientales", "Otras" ], contents: {} }, "2_bachillerato": { subjects: [ "Lengua Castellana y Literatura II", "Historia de España", "Matemáticas II", "Física", "Química", "Biología", "Otras" ], contents: {} }, "fp_basica": { subjects: [], contents: {} }, "fp_grado_medio": { subjects: [], contents: {} }, "fp_grado_superior": { subjects: [], contents: {} }, "universidad": { subjects: [], contents: {} } };
+    
+    // ... (El resto de tu código JavaScript permanece exactamente igual) ...
+    // ... (No es necesario pegarlo aquí para no hacer la respuesta excesivamente larga) ...
+    // ... (El código desde const questionTypes hasta el final es idéntico) ...
+    const questionTypes = ["test", "verdadero/falso", "rellenar_hueco"];
+    const allDifficulties = ['básico', 'fácil', 'medio', 'difícil', 'muy_difícil'];
+    let isSubjectsAreaPopulatedFromAutomation = false;
+    let isTeacherSubjectsAreaPopulatedFromAutomation = false;
+
+    function parseMarkdownWhileProtectingLatex(markdownString, isForListItem = false) { if (typeof markdownString !== 'string' || markdownString.trim() === '') return ''; const latexBlocks = []; let placeholderIndex = 0; const placeholderPrefix = "LATEXBLOCKPLACEHOLDER_"; const createPlaceholder = () => `${placeholderPrefix}${placeholderIndex++}ENDLATEX`; let tempString = markdownString.replace(/\$\$(.*?)\$\$/gs, (match) => { const placeholder = createPlaceholder(); latexBlocks.push({ placeholder, content: match }); return placeholder; }); tempString = tempString.replace(/(?<!\$)\$((?:[^\$\n]|\\\$)+?)\$(?!\$)/g, (match) => { if (match.startsWith(placeholderPrefix) && match.endsWith("ENDLATEX")) return match; const placeholder = createPlaceholder(); latexBlocks.push({ placeholder, content: match }); return placeholder; }); let htmlOutput = marked.parse(tempString); for (let i = latexBlocks.length - 1; i >= 0; i--) { const block = latexBlocks[i]; const placeholderRegExp = new RegExp(block.placeholder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), "g"); if (htmlOutput.includes(block.placeholder)) { htmlOutput = htmlOutput.replace(placeholderRegExp, block.content); } else { const pPlaceholderRegExp = new RegExp(`<p>${block.placeholder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}</p>`, "g"); if (htmlOutput.match(pPlaceholderRegExp)) { htmlOutput = htmlOutput.replace(pPlaceholderRegExp, block.content); } } } if (isForListItem) { const pMatch = htmlOutput.match(/^<p>(.*?)<\/p>\s*$/s); if (pMatch && pMatch[1] && !htmlOutput.substring(pMatch[0].length).trim()) { htmlOutput = pMatch[1]; } } return htmlOutput; }
+    function safeTypesetMathJax(elementsPromise) { if (typeof MathJax !== 'undefined' && MathJax.typesetPromise && MathJax.startup?.promise) { return MathJax.startup.promise.then(() => { return elementsPromise.then(elements => { if (!Array.isArray(elements)) { if (elements && typeof elements.querySelectorAll === 'function' && (elements.offsetParent !== null || document.body.contains(elements))) { elements = [elements]; } else { return Promise.resolve(); } } const visibleElements = elements.filter(el => el && typeof el.querySelectorAll === 'function' && (el.offsetParent !== null || el === document.body || document.body.contains(el))); if (visibleElements.length > 0) { return MathJax.typesetPromise(visibleElements); } return Promise.resolve(); }); }).catch((err) => console.error('MathJax typesetting failed', err)); } else { console.warn("MathJax not ready for typesetting."); return Promise.resolve(); } }
+
+    const tabButtons = document.querySelectorAll('.tab-button');
+    const tabContents = document.querySelectorAll('.tab-content');
+    const levelSelect = document.getElementById('level');
+    const subjectsArea = document.getElementById('subjects-area');
+    const customSubjectNameInput = document.getElementById('custom-subject-name');
+    const carreraInputGroup = document.getElementById('carrera-input-group');
+    const customCarreraNameInput = document.getElementById('custom-carrera-name');
+    const populateUniversitySubjectsButton = document.getElementById('populate-university-subjects-button');
+    const fpTitleInputGroup = document.getElementById('fp-title-input-group');
+    const customFpTitleNameInput = document.getElementById('custom-fp-title-name');
+    const populateFpModulesButton = document.getElementById('populate-fp-modules-button');
+    const topicsArea = document.getElementById('topics-area');
+    const customContentsArea = document.getElementById('custom-contents-area');
+    const automateExhaustiveButton = document.getElementById('automate-exhaustive-get-contents-button');
+    const progressGrid = document.getElementById('progress-grid');
+    const teacherCodeInput = document.getElementById('teacher-code-input');
+    const automateExercisesButton = document.getElementById('automate-exercises-button');
+    const quizModalOverlay = document.getElementById('quiz-modal-overlay');
+    const quizModal = document.getElementById('quiz-modal');
+    const quizTitle = document.getElementById('quiz-title');
+    const quizProgress = document.getElementById('quiz-progress');
+    const quizQuestion = document.getElementById('quiz-question');
+    const quizOptions = document.getElementById('quiz-options');
+    const quizFeedback = document.getElementById('quiz-feedback');
+    const submitQuizAnswerButton = document.getElementById('submit-quiz-answer-button');
+    const nextQuizQuestionButton = document.getElementById('next-quiz-question-button');
+    
+    const statsDifficultySelect = document.getElementById('stats-difficulty-select');
+    const setChartRadarButton = document.getElementById('set-chart-radar');
+    const setChartBarButton = document.getElementById('set-chart-bar');
+    let statsChart;
+
+    const revisionDifficultySelect = document.getElementById('revision-difficulty-select');
+    let revisionChart;
+    let loadedStudentData = null; 
+
+    let appState = {
+        studentProfile: { initialName: null, currentName: null },
+        progressData: {},
+        quizAttempts: [],
+        activityLog: [],
+        currentQuiz: null,
+        professorConfig: null,
+        teacherTemplate: {
+            questionPool: {}, currentReview: { content: null, difficulty: null },
+            currentEdit: { content: null, difficulty: null, questionId: null },
+            currentRegenerate: { content: null, difficulty: null, questionId: null },
+        }
+    };
+    
+    function logActivity(eventMessage) {
+        const timestamp = new Date().toISOString();
+        appState.activityLog.push({ timestamp, event: eventMessage });
+        console.log(`[LOG] ${eventMessage}`);
+    }
+
+    function resetAppState() {
+        appState = {
+            studentProfile: { initialName: null, currentName: null },
+            progressData: {}, quizAttempts: [], activityLog: [],
+            currentQuiz: null, professorConfig: null,
+            teacherTemplate: { questionPool: {}, currentReview: { content: null, difficulty: null }, currentEdit: { content: null, difficulty: null, questionId: null }, currentRegenerate: { content: null, difficulty: null, questionId: null }, }
+        };
+        document.getElementById('student-name-input').value = '';
+        customContentsArea.value = '';
+    }
+    
+    function showMessage(text, type = 'info', duration = 3500) { const messageBox = document.getElementById('message-box'); if (!messageBox) return; if (window.messageTimeout) clearTimeout(window.messageTimeout); messageBox.textContent = text; messageBox.className = 'message-box show'; if (type === 'error') messageBox.style.backgroundColor = '#dc3545'; else if (type === 'warning') messageBox.style.backgroundColor = '#ffc107'; else if (type === 'success') messageBox.style.backgroundColor = 'var(--status-passed)'; else messageBox.style.backgroundColor = '#333'; window.messageTimeout = setTimeout(() => { messageBox.classList.remove('show'); }, duration); }
+    function loadProgress() { const savedData = localStorage.getItem('progresoGuiadoData'); if (savedData) { Object.assign(appState, JSON.parse(savedData)); } }
+    function saveProgress() { localStorage.setItem('progresoGuiadoData', JSON.stringify(appState)); }
+    function addOtherSubjectOption(area, customInputId, isTeacher = false) { const checkboxId = isTeacher ? 'teacher-other-subject-checkbox' : 'other-subject-checkbox'; if (document.getElementById(checkboxId)) return; const otherSubjectDiv = document.createElement('div'); otherSubjectDiv.innerHTML = `<label class="flex items-center"><input type="checkbox" id="${checkboxId}" class="subject-checkbox mr-2" value="Otras"> Otras</label>`; area.appendChild(otherSubjectDiv); document.getElementById(checkboxId).addEventListener('change', (event) => { document.getElementById(customInputId).style.display = event.target.checked ? 'block' : 'none'; if (!event.target.checked) document.getElementById(customInputId).value = ''; }); }
+    function populateSubjects() { const selectedLevelKey = levelSelect.value; carreraInputGroup.style.display = selectedLevelKey === 'universidad' ? 'flex' : 'none'; fpTitleInputGroup.style.display = selectedLevelKey.startsWith('fp_') ? 'flex' : 'none'; customSubjectNameInput.style.display = 'none'; subjectsArea.innerHTML = ''; topicsArea.innerHTML = '<p class="text-gray-500">Selecciona o busca asignaturas para ver los contenidos.</p>'; isSubjectsAreaPopulatedFromAutomation = false; if (selectedLevelKey === 'universidad') { subjectsArea.innerHTML = '<p class="text-gray-500">Introduce el nombre de la carrera y pulsa "Buscar Asignaturas".</p>'; } else if (selectedLevelKey.startsWith('fp_')) { subjectsArea.innerHTML = '<p class="text-gray-500">Introduce el Título/Familia Profesional y pulsa "Buscar Módulos".</p>'; } else { customCarreraNameInput.value = ''; customFpTitleNameInput.value = ''; const subjectsFromCurriculum = simulatedCurriculum[selectedLevelKey]?.subjects || []; if (subjectsFromCurriculum.length > 0) { subjectsFromCurriculum.forEach(subject => { const subjectCheckboxDiv = document.createElement('div'); subjectCheckboxDiv.innerHTML = `<label class="flex items-center"><input type="checkbox" class="subject-checkbox mr-2" value="${subject}">${subject}</label>`; subjectsArea.appendChild(subjectCheckboxDiv); }); } else { subjectsArea.innerHTML = '<p class="text-gray-500">No se encontraron asignaturas predefinidas. Añade "Otras".</p>'; } } addOtherSubjectOption(subjectsArea, 'custom-subject-name', false); subjectsArea.querySelectorAll('.subject-checkbox').forEach(cb => cb.addEventListener('change', populateTopics)); renderProgressGrid(); }
+    function populateSubjectsFromList(subjectsList) { subjectsArea.innerHTML = ''; if (subjectsList.length === 0) { subjectsArea.innerHTML = '<p class="text-gray-500">No se encontraron asignaturas/módulos.</p>'; } else { subjectsList.forEach(subject => { const subjectCheckboxDiv = document.createElement('div'); subjectCheckboxDiv.innerHTML = `<label class="flex items-center"><input type="checkbox" class="subject-checkbox automated-subject-checkbox mr-2" value="${subject}"> ${subject}</label>`; subjectsArea.appendChild(subjectCheckboxDiv); }); } addOtherSubjectOption(subjectsArea, 'custom-subject-name', false); subjectsArea.querySelectorAll('.subject-checkbox').forEach(cb => cb.addEventListener('change', populateTopics)); isSubjectsAreaPopulatedFromAutomation = true; }
+    function getSelectedSubjects() { let selSubs = Array.from(subjectsArea.querySelectorAll('.subject-checkbox:checked')).map(cb => cb.value); const otherCb = document.getElementById('other-subject-checkbox'); const customName = customSubjectNameInput.value.trim(); if (otherCb?.checked && customName) { selSubs = selSubs.filter(s => s !== 'Otras'); selSubs.push(customName); } else if (otherCb?.checked) { selSubs = selSubs.filter(s => s !== 'Otras'); } return selSubs; }
+    function populateTopics() { topicsArea.innerHTML = ''; const selectedLevelKey = levelSelect.value; const selectedSubjects = Array.from(subjectsArea.querySelectorAll('.subject-checkbox:checked:not(#other-subject-checkbox)')).map(cb => cb.value); if (selectedSubjects.length === 0) { topicsArea.innerHTML = '<p class="text-gray-500">Selecciona una asignatura para ver los temas sugeridos.</p>'; renderProgressGrid(); return; } let hasContents = false; selectedSubjects.forEach(subject => { const contentsForSubject = simulatedCurriculum[selectedLevelKey]?.contents?.[subject] || {}; const themes = Object.keys(contentsForSubject); if (themes.length > 0) { hasContents = true; const subjectTitle = document.createElement('div'); subjectTitle.className = 'subject-group-title'; subjectTitle.textContent = subject; topicsArea.appendChild(subjectTitle); themes.forEach(theme => { const themeItemDiv = document.createElement('div'); const themeValue = `${subject}: ${theme}`; const subtopics = contentsForSubject[theme]; themeItemDiv.innerHTML = `<label class="cursor-pointer flex items-center"><input type="checkbox" class="topic-checkbox theme-checkbox mr-2" value="${themeValue}"><span class="flex-grow">${theme}</span></label>`; const subtopicListDiv = document.createElement('div'); subtopicListDiv.classList.add('subtopic-list', 'hidden', 'ml-6'); if (Array.isArray(subtopics) && subtopics.length > 0) { subtopics.forEach(subtopic => { const subtopicValue = `${themeValue}: ${subtopic}`; subtopicListDiv.innerHTML += `<label class="flex items-center"><input type="checkbox" class="topic-checkbox subtopic-checkbox mr-2" value="${subtopicValue}">${subtopic}</label>`; }); } themeItemDiv.appendChild(subtopicListDiv); topicsArea.appendChild(themeItemDiv); themeItemDiv.querySelector('label span').addEventListener('click', (e) => { e.preventDefault(); subtopicListDiv.classList.toggle('hidden'); }); themeItemDiv.querySelector('.theme-checkbox').addEventListener('change', (e) => { subtopicListDiv.querySelectorAll('.subtopic-checkbox').forEach(scb => scb.checked = e.target.checked); renderProgressGrid(); }); subtopicListDiv.querySelectorAll('.subtopic-checkbox').forEach(scb => { scb.addEventListener('change', renderProgressGrid); }); }); } }); if (!hasContents) { topicsArea.innerHTML = '<p class="text-gray-500">No hay temas predefinidos. Usa la búsqueda exhaustiva.</p>'; } renderProgressGrid(); }
+    function parseAndPopulateAutomatedTopics(text, targetTopicsArea) { targetTopicsArea.innerHTML = ''; const structuredContents = {}; const blocks = text.split(';').map(t => t.trim()).filter(Boolean); blocks.forEach(block => { const parts = block.split(':').map(p => p.trim()); if (parts.length >= 2) { const subject = parts[0]; const theme = parts[1]; if (!structuredContents[subject]) structuredContents[subject] = {}; if (!structuredContents[subject][theme]) structuredContents[subject][theme] = []; if (parts.length > 2 && parts[2]) { const subtopics = parts[2].split(',').map(s => s.trim()).filter(Boolean); structuredContents[subject][theme].push(...subtopics); } } }); Object.keys(structuredContents).forEach(subject => { const subjectTitle = document.createElement('div'); subjectTitle.className = 'subject-group-title'; subjectTitle.textContent = subject; targetTopicsArea.appendChild(subjectTitle); Object.keys(structuredContents[subject]).forEach(theme => { const themeItemDiv = document.createElement('div'); const themeValue = `${subject}: ${theme}`; const subtopics = structuredContents[subject][theme]; themeItemDiv.innerHTML = `<label class="cursor-pointer flex items-center"><input type="checkbox" class="topic-checkbox theme-checkbox mr-2" value="${themeValue}"><span class="flex-grow">${theme}</span></label>`; const subtopicListDiv = document.createElement('div'); subtopicListDiv.classList.add('subtopic-list', 'hidden', 'ml-6'); if (subtopics.length > 0) { subtopics.forEach(subtopic => { const subtopicValue = `${themeValue}: ${subtopic}`; subtopicListDiv.innerHTML += `<label class="flex items-center"><input type="checkbox" class="topic-checkbox subtopic-checkbox mr-2" value="${subtopicValue}">${subtopic}</label>`; }); } themeItemDiv.appendChild(subtopicListDiv); targetTopicsArea.appendChild(themeItemDiv); themeItemDiv.querySelector('label span').addEventListener('click', (e) => { e.preventDefault(); subtopicListDiv.classList.toggle('hidden'); }); const onRender = targetTopicsArea === topicsArea ? renderProgressGrid : () => {}; themeItemDiv.querySelector('.theme-checkbox').addEventListener('change', (e) => { subtopicListDiv.querySelectorAll('.subtopic-checkbox').forEach(scb => scb.checked = e.target.checked); onRender(); }); subtopicListDiv.querySelectorAll('.subtopic-checkbox').forEach(scb => { scb.addEventListener('change', onRender); }); }); }); if (targetTopicsArea === topicsArea) renderProgressGrid(); }
+    function getSelectedContents() { const fromCheckboxes = Array.from(document.querySelectorAll('#topics-area .topic-checkbox:checked')).map(cb => cb.value); const fromTextarea = customContentsArea.value.split('\n').map(line => line.trim()).filter(line => line.length > 0); const allContents = [...new Set([...fromCheckboxes, ...fromTextarea])]; return allContents; }
+    function copyStudentContentsForTeacher() { const contentsToCopy = getSelectedContents(); if (contentsToCopy.length === 0) { showMessage("No hay contenidos seleccionados para copiar.", "warning"); return; } const formattedText = contentsToCopy.join('\n'); navigator.clipboard.writeText(formattedText).then(() => { showMessage("Contenidos copiados. Pégalos en la pestaña de Docente.", "success", 4000); }).catch(err => { console.error("Error al copiar al portapeles:", err); showMessage("No se pudieron copiar los contenidos.", "error"); }); }
+    async function automateGetContents(isExhaustive = false, isTeacher = false) { const currentLevelSelect = isTeacher ? document.getElementById('teacher-level') : levelSelect; const currentCustomCarreraInput = isTeacher ? document.getElementById('teacher-custom-carrera-name') : customCarreraNameInput; const currentCustomFpInput = isTeacher ? document.getElementById('teacher-custom-fp-title-name') : customFpTitleNameInput; const currentGetSelectedSubjects = isTeacher ? getTeacherSelectedSubjects : getSelectedSubjects; const currentPopulateSubjects = isTeacher ? populateTeacherSubjectsFromList : populateSubjectsFromList; const currentTopicsArea = isTeacher ? document.getElementById('teacher-topics-area') : topicsArea; const currentButton = isTeacher ? document.getElementById('teacher-automate-exhaustive-get-contents-button') : automateExhaustiveButton; const currentIsSubjectsPopulated = isTeacher ? isTeacherSubjectsAreaPopulatedFromAutomation : isSubjectsAreaPopulatedFromAutomation; const selectedLevelKey = currentLevelSelect.value; const levelText = currentLevelSelect.options[currentLevelSelect.selectedIndex].text; let promptForIa = ''; let contextIdentifier = ''; let isSubjectSearch = false; if (selectedLevelKey === 'universidad') { const carreraName = currentCustomCarreraInput.value.trim(); if (!carreraName) { showMessage("Introduce el nombre de la carrera universitaria.", "warning"); return; } contextIdentifier = `la carrera "${carreraName}"`; isSubjectSearch = !currentIsSubjectsPopulated; if (isSubjectSearch) { promptForIa = `Lista las asignaturas principales para la carrera universitaria de "${carreraName}" en España. Devuelve solo la lista de nombres de asignaturas, separados por comas.`; } } else if (selectedLevelKey.startsWith('fp_')) { const fpTitle = currentCustomFpInput.value.trim(); if (!fpTitle) { showMessage("Introduce el Título/Familia Profesional de FP.", "warning"); return; } contextIdentifier = `el ciclo de FP "${fpTitle}"`; isSubjectSearch = !currentIsSubjectsPopulated; if (isSubjectSearch) { promptForIa = `Lista los módulos formativos (asignaturas) comunes para el ciclo de Formación Profesional titulado "${fpTitle}" (nivel ${levelText}) en España. Devuelve solo la lista de nombres de módulos, separados por comas.`; } } if (!isSubjectSearch) { const selSubjects = currentGetSelectedSubjects(); if (selSubjects.length === 0) { showMessage("Selecciona al menos una asignatura para la búsqueda.", "warning"); return; } contextIdentifier = `la(s) asignatura(s) ${selSubjects.join(', ')}`; promptForIa = `Para ${contextIdentifier} en el nivel de ${levelText}, genera una lista detallada de temas y sus sub-apartados. Formato estricto: "Asignatura: Tema Principal: Subtema1, Subtema2; Asignatura: Otro Tema: SubtemaA, SubtemaB". Repite la asignatura antes de cada tema.`; } currentButton.disabled = true; currentButton.textContent = "Buscando..."; showMessage(isSubjectSearch ? `Buscando materias para ${contextIdentifier}...` : `Buscando contenidos para ${contextIdentifier}...`, "info"); try { const response = await fetch(API_URL, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ contents: [{ parts: [{ text: promptForIa }] }], generationConfig: { temperature: 0.5 } }) }); if (!response.ok) throw new Error("La respuesta de la API no fue correcta."); const data = await response.json(); const resultText = data.candidates?.[0]?.content?.parts?.[0]?.text; if (resultText) { if(isSubjectSearch){ const itemsList = resultText.split(/, *|; */).map(s => s.trim()).filter(s => s); currentPopulateSubjects(itemsList); showMessage(`Asignaturas/Módulos cargados para ${contextIdentifier}.`, 'success'); } else { parseAndPopulateAutomatedTopics(resultText, currentTopicsArea); showMessage(`Contenidos cargados para ${contextIdentifier}.`, 'success'); } } else { showMessage("La IA no devolvió resultados.", "warning"); } } catch(error) { showMessage(`Error en la búsqueda: ${error.message}`, "error"); } finally { currentButton.disabled = false; currentButton.textContent = "Búsqueda Exhaustiva de Contenidos (IA)"; } }
+    function renderProgressGrid() { if (!document.body.classList.contains('teacher-mode-active') && !appState.professorConfig) { progressGrid.innerHTML = '<div class="col-span-6 text-center text-gray-500">Introduce un código de profesor para cargar tu plan de estudio.</div>'; return; } const contents = getSelectedContents(); if (contents.length === 0) { progressGrid.innerHTML = '<div class="col-span-6 text-center text-gray-500">Selecciona o añade contenidos para ver tu progreso.</div>'; return; } const difficultiesText = ['Básico', 'Fácil', 'Medio', 'Difícil', 'Muy Difícil']; let gridHTML = '<div class="grid-header">Contenidos</div>'; difficultiesText.forEach(d => gridHTML += `<div class="grid-header">${d}</div>`); contents.forEach(content => { const contentParts = content.split(':'); const displayName = contentParts.map(p => p.trim()).pop(); gridHTML += `<div class="content-label">${displayName}</div>`; let previousLevelPassed = true; allDifficulties.forEach((diffKey, index) => { const data = appState.progressData[content]?.[diffKey]; let buttonClass = 'status-locked'; let buttonText = 'Bloqueado'; let disabled = true; const config = appState.professorConfig || { passingScore: 5, maxScore: 10 }; const passingScore = config.passingScore; const maxScore = config.maxScore; if (index === 0 || previousLevelPassed) { disabled = false; buttonClass = 'status-not-started'; buttonText = 'Iniciar'; if (data) { buttonText = `${data.score}/${maxScore}`; buttonClass = data.score >= passingScore ? 'status-passed' : 'status-failed'; } } if (!data || data.score < passingScore) { previousLevelPassed = false; } gridHTML += `<div><button class="level-button w-full ${buttonClass}" data-content="${content}" data-difficulty="${diffKey}" ${disabled ? 'disabled' : ''}>${buttonText}</button></div>`; }); }); progressGrid.innerHTML = gridHTML; populateDifficultySelect(statsDifficultySelect); }
+    async function startQuiz(content, difficultyKey) { logActivity(`Inició test: "${content.split(':').pop().trim()}" - ${difficultyKey}.`); if (appState.professorConfig && appState.professorConfig.questions && appState.professorConfig.questions[content] && appState.professorConfig.questions[content][difficultyKey]) { const questions = appState.professorConfig.questions[content][difficultyKey]; appState.currentQuiz = { content, difficultyKey, questions, currentQuestionIndex: 0, answers: [], score: 0 }; openQuizModal(); showMessage('Iniciando test preparado por el profesor.', 'info'); return; } const difficultyName = difficultyKey.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()); showMessage(`Generando prueba de nivel ${difficultyName}...`, 'info', 8000); const config = appState.professorConfig || { passingScore: 5, maxScore: 10, penalty: 0, difficulties: { [difficultyKey]: { 'test': 10 } } }; const difficultyConfig = config.difficulties[difficultyKey] || { 'test': 10 }; const levelKey = config.level || document.getElementById('level').value; const levelSelectElement = document.getElementById('level'); let levelText = 'educación general'; for (let option of levelSelectElement.options) { if (option.value === levelKey) { levelText = option.text; break; } } const totalQuestions = Object.values(difficultyConfig).reduce((a, b) => a + b, 0); if (totalQuestions === 0) { showMessage("Este nivel no tiene preguntas configuradas.", "warning"); return; } let questionTypesPrompt = `Genera un total de ${totalQuestions} preguntas autocorregibles según esta distribución:\n`; for (const [type, count] of Object.entries(difficultyConfig)) { if (count > 0) { const typeName = type.replace('_', ' '); questionTypesPrompt += `- ${count} preguntas de tipo "${typeName}".\n`; } } questionTypesPrompt += "Para 'test', da 4 opciones. Para 'verdadero/falso', las opciones DEBEN SER 'Verdadero' y 'Falso'. Para 'rellenar hueco', la pregunta debe contener '[HUECO]' y las opciones deben ser 4 posibles respuestas para ese hueco."; 
+
+const prompt = `Eres un generador de exámenes. Crea una prueba sobre el contenido: "${content}". El nivel académico es ${levelText}. La dificultad debe ser: ${difficultyName}. ${questionTypesPrompt} Formato de salida OBLIGATORIO: Un array JSON. Cada objeto debe tener: "type", "question", "options", y "correctAnswer". Instrucciones para LaTeX (CRÍTICO para visualización correcta): 1. Usa delimitadores estándar: \$ ... \$ para matemáticas en línea y \$\$ ... \$\$ para matemáticas en pantalla. 2. **Escapado para JSON (CRÍTICO):** Para que el JSON sea válido, debes escapar las barras invertidas de LaTeX. * **Regla General:** Un comando con una sola barra invertida como \\frac o \\rightarrow debe escribirse con una **doble barra invertida** en la cadena JSON. Por ejemplo: "\\\\frac" o "\\\\rightarrow". * **Regla para Saltos de Línea:** El comando de salto de línea de LaTeX, que son dos barras seguidas (\\\\), debe escribirse con **cuatro barras invertidas** en la cadena JSON. Por ejemplo: "\\\\\\\\". Ejemplos correctos para el JSON: * **Fracción:** Para renderizar \$ \\frac{1}{2} \$, la cadena JSON debe ser: "\$ \\\\frac{1}{2} \$". * **Reacción Química:** Para renderizar \$ CH_4 + 2O_2 \\rightarrow CO_2 + 2H_2O \$, la cadena JSON debe ser: "\$ CH_4 + 2O_2 \\\\rightarrow CO_2 + 2H_2O \$". * **Matriz:** Para renderizar \$\$ \\begin{pmatrix} a & b \\\\ c & d \\end{pmatrix} \$\$, la cadena JSON debe ser: "\$\$ \\\\begin{pmatrix} a & b \\\\\\\\ c & d \\\\end{pmatrix} \$\$". Responde ÚNICAMENTE con el array JSON.`;
+
+try { const response = await fetch(API_URL, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.8 } }) }); if (!response.ok) throw new Error("Error en la API al generar el quiz."); 
+
+const data = await response.json(); const jsonText = data.candidates?.[0]?.content?.parts?.[0]?.text.match(/\[[\s\S]*\]/)[0]; const questions = JSON.parse(jsonText); if (!questions || questions.length === 0) throw new Error("La IA no generó preguntas válidas."); appState.currentQuiz = { content, difficultyKey, questions, currentQuestionIndex: 0, answers: [], score: 0 }; openQuizModal(); } catch (error) { showMessage(`Error al iniciar la prueba: ${error.message}`, 'error'); } }
+    function openQuizModal() { document.getElementById('quiz-modal-overlay').style.display = 'flex'; displayQuizQuestion(); }
+    function closeQuizModal() { document.getElementById('quiz-modal-overlay').style.display = 'none'; appState.currentQuiz = null; }
+    function displayQuizQuestion() { const quiz = appState.currentQuiz; if (!quiz || quiz.currentQuestionIndex >= quiz.questions.length) { endQuiz(); return; } const q = quiz.questions[quiz.currentQuestionIndex]; quizTitle.textContent = `Prueba de Nivel: ${quiz.difficultyKey.replace(/_/g, ' ')}`; quizProgress.textContent = `Pregunta ${quiz.currentQuestionIndex + 1} de ${quiz.questions.length}`; quizQuestion.innerHTML = parseMarkdownWhileProtectingLatex(q.question); quizFeedback.style.display = 'none'; quizOptions.innerHTML = ''; if (q.options && Array.isArray(q.options)) { q.options.forEach((optionText) => { const label = document.createElement('label'); label.className = 'option-label'; const radio = document.createElement('input'); radio.type = 'radio'; radio.name = 'quiz-option'; radio.value = optionText; label.appendChild(radio); const optionHtml = parseMarkdownWhileProtectingLatex(optionText, true); label.innerHTML += optionHtml; quizOptions.appendChild(label); }); } submitQuizAnswerButton.style.display = 'block'; nextQuizQuestionButton.style.display = 'none'; safeTypesetMathJax(Promise.resolve([quizQuestion, quizOptions])); }
+    function handleSubmitAnswer() { const quiz = appState.currentQuiz; const selectedOptionInput = quizOptions.querySelector('input[name="quiz-option"]:checked'); if (!selectedOptionInput) { showMessage("Por favor, selecciona una respuesta.", "warning"); return; } const userAnswer = selectedOptionInput.value; const q = quiz.questions[quiz.currentQuestionIndex]; const isCorrect = userAnswer.trim().toLowerCase() === q.correctAnswer.trim().toLowerCase(); quiz.answers.push({ question: q.question, options: q.options, correctAnswer: q.correctAnswer, userAnswer: userAnswer, isCorrect: isCorrect }); quizOptions.querySelectorAll('.option-label').forEach(label => { const radio = label.querySelector('input'); label.classList.add('disabled'); radio.disabled = true; if (radio.value.trim().toLowerCase() === q.correctAnswer.trim().toLowerCase()) { label.classList.add('correct'); } else if (radio.checked) { label.classList.add('incorrect'); } }); const correctAnswerHtml = parseMarkdownWhileProtectingLatex(q.correctAnswer, true); quizFeedback.innerHTML = isCorrect ? "¡Correcto!" : `Respuesta correcta: <span class="font-normal">${correctAnswerHtml}</span>`; quizFeedback.style.color = isCorrect ? 'var(--status-passed)' : 'var(--status-not-started)'; quizFeedback.style.backgroundColor = isCorrect ? '#eafaf1' : '#fbeae5'; quizFeedback.style.display = 'block'; safeTypesetMathJax(Promise.resolve([quizFeedback])); submitQuizAnswerButton.style.display = 'none'; nextQuizQuestionButton.style.display = 'block'; }
+    function handleNextQuestion() { const quiz = appState.currentQuiz; quiz.currentQuestionIndex++; displayQuizQuestion(); }
+    function endQuiz() { const quiz = appState.currentQuiz; const config = appState.professorConfig || { passingScore: 5, maxScore: 10, penalty: 0 }; const pointsPerQuestion = config.maxScore / quiz.questions.length; let correctAnswers = 0; quiz.answers.forEach(ans => { if (ans.isCorrect) correctAnswers++; }); const score = (correctAnswers * pointsPerQuestion) - ((quiz.questions.length - correctAnswers) * config.penalty); const finalScore = Math.max(0, parseFloat(score.toFixed(1))); if (!appState.progressData[quiz.content]) appState.progressData[quiz.content] = {}; appState.progressData[quiz.content][quiz.difficultyKey] = { score: finalScore, status: finalScore >= config.passingScore ? 'passed' : 'failed' }; appState.quizAttempts.push({ content: quiz.content, difficulty: quiz.difficultyKey, timestamp: new Date().toISOString(), score: finalScore, questionsAndAnswers: quiz.answers }); logActivity(`Finalizó test: "${quiz.content.split(':').pop().trim()}" - ${quiz.difficultyKey}. Puntuación: ${finalScore}/${config.maxScore}.`); saveProgress(); renderProgressGrid(); closeQuizModal(); showMessage(`Prueba finalizada. Tu nota: ${finalScore}/${config.maxScore}`, 'info'); }
+    function saveProgressToFile() { const studentNameInput = document.getElementById('student-name-input'); const newName = studentNameInput.value.trim(); if (!newName) { showMessage("Por favor, introduce tu nombre completo para guardar el progreso.", "warning"); return; } if (!appState.studentProfile.initialName) { appState.studentProfile.initialName = newName; logActivity(`Progreso iniciado con el nombre: "${newName}".`); } else if (appState.studentProfile.currentName !== newName) { logActivity(`Nombre cambiado de "${appState.studentProfile.currentName}" a "${newName}".`); } appState.studentProfile.currentName = newName; logActivity("Progreso guardado en archivo."); saveProgress(); const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(appState, null, 2)); const downloadAnchorNode = document.createElement('a'); downloadAnchorNode.setAttribute("href", dataStr); downloadAnchorNode.setAttribute("download", `progreso_${newName.replace(/ /g, '_')}.json`); document.body.appendChild(downloadAnchorNode); downloadAnchorNode.click(); downloadAnchorNode.remove(); showMessage("Progreso guardado en tu ordenador.", "success"); }
+    function loadProgressFromFile(event) { const file = event.target.files[0]; if (!file) return; const reader = new FileReader(); reader.onload = function(e) { try { const data = JSON.parse(e.target.result); if (data.type === 'teacher-template') { resetAppState(); appState.professorConfig = data; teacherCodeInput.value = ''; customContentsArea.value = [...new Set(data.contents)].join('\n'); logActivity("Plantilla de profesor cargada desde archivo."); showMessage("Plantilla cargada. Introduce tu nombre para empezar.", "success"); } else { if (!data.progressData || !data.activityLog || !data.studentProfile) { throw new Error("El archivo no es un archivo de progreso válido."); } Object.assign(appState, data); logActivity("Sesión de progreso cargada desde archivo."); showMessage("Progreso cargado con éxito.", "success"); } document.getElementById('student-name-input').value = appState.studentProfile.currentName || ''; const configSource = appState.professorConfig || data; levelSelect.value = configSource.level || '2_eso'; populateSubjects(); setTimeout(() => { const contents = (appState.professorConfig && appState.professorConfig.contents) ? appState.professorConfig.contents : []; const subjects = (appState.professorConfig && appState.professorConfig.subjects) ? appState.professorConfig.subjects : []; subjects.forEach(subjectName => { const cb = subjectsArea.querySelector(`input[value="${subjectName}"]`); if (cb) cb.checked = true; }); populateTopics(); customContentsArea.value = contents.join('\n'); renderProgressGrid(); saveProgress(); }, 100); } catch (error) { showMessage(`Error al cargar el archivo: ${error.message}`, "error"); } finally { document.getElementById('load-progress-input').value = ''; } }; reader.readAsText(file); }
+    
+    function startTemplateCreationProcess() {
+        const teacherContents = getTeacherSelectedContents();
+        if (teacherContents.length === 0) {
+            showMessage("Por favor, selecciona al menos un contenido.", "warning");
+            return;
+        }
+        const config = getTeacherConfiguration(false);
+        if (!config) return;
+
+        appState.teacherTemplate.questionPool = {};
+        teacherContents.forEach(content => {
+            appState.teacherTemplate.questionPool[content] = {};
+            allDifficulties.forEach(difficulty => {
+                const difficultyConfig = config.difficulties[difficulty];
+                if (difficultyConfig && Object.keys(difficultyConfig).length > 0 && Object.values(difficultyConfig).some(v => v > 0)) {
+                    appState.teacherTemplate.questionPool[content][difficulty] = {
+                        questions: [],
+                        selected: [],
+                        required: { ...difficultyConfig }
+                    };
+                }
+            });
+        });
+
+        showMessage("Estructura de la plantilla creada. Ahora genera las preguntas para cada sección.", "success");
+        const firstContent = teacherContents[0];
+        const firstDifficulty = allDifficulties.find(d => appState.teacherTemplate.questionPool[firstContent]?.[d]) || allDifficulties[0];
+        openReviewModal(firstContent, firstDifficulty);
+    }
+
+    async function generateQuestionsForSection(content, difficulty, buttonElement) {
+        const originalText = buttonElement.innerHTML;
+        buttonElement.disabled = true;
+        buttonElement.innerHTML = `<span class="spinner"></span> Generando...`;
+        let success = true;
+        const teacherLevelSelect = document.getElementById('teacher-level');
+        const levelText = teacherLevelSelect.options[teacherLevelSelect.selectedIndex].text;
+
+        try {
+            const section = appState.teacherTemplate.questionPool[content][difficulty];
+            if (!section) throw new Error("Configuración de sección no encontrada.");
+
+            section.questions = []; 
+            section.selected = [];
+
+            for (const [type, count] of Object.entries(section.required)) {
+                if (count === 0) continue;
+                const numToGenerate = count + 3;
+                showMessage(`Generando ${numToGenerate} de tipo "${type}"...`, 'info', 4000);
+                
+                const typePrompt = type === 'verdadero_falso' ? "Las opciones DEBEN ser 'Verdadero' y 'Falso'." : type === 'rellenar_hueco' ? "La pregunta DEBE contener '[HUECO]' y las opciones deben ser 4 posibles respuestas para ese hueco." : "Las opciones deben ser 4 alternativas de respuesta.";
+                        const prompt = `Genera un array JSON de ${numToGenerate} preguntas de tipo "${type.replace('_',' ')}" sobre "${content}" para el nivel académico de ${levelText} (dificultad: ${difficulty}). ${typePrompt}
+
+Instrucciones para LaTeX (CRÍTICO para visualización correcta):
+1.  Usa delimitadores estándar: \`$ ... $\` para matemáticas en línea y \`$$ ... $$\` para matemáticas en pantalla. **TODO el contenido matemático debe estar dentro de estos delimitadores.**
+2.  **Escapado para JSON (CRÍTICO):** Para que el JSON sea válido, debes escapar las barras invertidas de LaTeX.
+    *   **Regla General:** Un comando con una sola barra invertida como \\frac o \\rightarrow debe escribirse con una **doble barra invertida** en la cadena JSON. Por ejemplo: "\\\\frac" o "\\\\rightarrow".
+    *   **Regla para Saltos de Línea:** El comando de salto de línea de LaTeX, que son dos barras seguidas (\\\\), debe escribirse con **cuatro barras invertidas** en la cadena JSON. Por ejemplo: "\\\\\\\\".
+
+Ejemplos correctos para el JSON:
+*   **Fracción:** Para renderizar \$ \\frac{1}{2} \$, la cadena JSON debe ser: "\$ \\\\frac{1}{2} \$".
+*   **Reacción Química:** Para renderizar \$ CH_4 + 2O_2 \\rightarrow CO_2 + 2H_2O \$, la cadena JSON debe ser: "\$ CH_4 + 2O_2 \\\\rightarrow CO_2 + 2H_2O \$".
+*   **Matriz:** Para renderizar \$\$ \\begin{pmatrix} a & b \\\\ c & d \\end{pmatrix} \$\$, la cadena JSON debe ser: "\$\$ \\\\begin{pmatrix} a & b \\\\\\\\ c & d \\\\end{pmatrix} \$\$".
+
+El formato de cada objeto JSON debe ser estrictamente: {"type": "${type}", "question": "...", "options": [], "correctAnswer": "..."}.
+Responde ÚNICAMENTE con el array JSON.`;
+                const response = await fetch(API_URL, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }) });
+                if (!response.ok) throw new Error(`La API falló al generar preguntas de tipo ${type}.`);
+                
+                const data = await response.json();
+                const jsonText = data.candidates?.[0]?.content?.parts?.[0]?.text.match(/\[[\s\S]*\]/)[0];
+                const generatedQuestions = JSON.parse(jsonText).map((q, i) => ({ ...q, type, id: `q-${type}-${Date.now()}-${i}` }));
+                
+                section.questions.push(...generatedQuestions);
+            }
+        } catch (error) {
+            success = false;
+            showMessage(`Error al generar preguntas: ${error.message}`, "error");
+        } finally {
+            if(success) showMessage(`Preguntas generadas para ${content.split(':').pop().trim()} (${difficulty}).`, 'success');
+            buttonElement.disabled = false;
+            buttonElement.innerHTML = originalText;
+            renderReviewQuestions();
+        }
+    }
+
+    async function generateMissingQuestions(content, difficulty, type, numToGenerate, buttonElement) {
+        buttonElement.disabled = true;
+        buttonElement.innerHTML = `<span class="spinner"></span>`;
+        const teacherLevelSelect = document.getElementById('teacher-level');
+        const levelText = teacherLevelSelect.options[teacherLevelSelect.selectedIndex].text;
+        
+        try {
+            const section = appState.teacherTemplate.questionPool[content][difficulty];
+            const numToRequest = parseInt(numToGenerate) + 3; 
+            showMessage(`Generando ${numToRequest} preguntas de tipo "${type}"...`, 'info', 4000);
+            
+            const typePrompt = type === 'verdadero_falso' ? "Opciones DEBEN ser 'Verdadero' y 'Falso'." : type === 'rellenar_hueco' ? "Pregunta DEBE contener '[HUECO]' y 4 opciones." : "4 opciones de respuesta.";
+        const prompt = `Genera un array JSON de ${numToRequest} preguntas de tipo "${type.replace('_',' ')}" sobre "${content}" para el nivel académico de ${levelText} (dificultad: ${difficulty}). ${typePrompt}
+
+Instrucciones para LaTeX (CRÍTICO para visualización correcta):
+1.  Usa delimitadores estándar: \`$ ... $\` para matemáticas en línea y \`$$ ... $$\` para matemáticas en pantalla. **TODO el contenido matemático debe estar dentro de estos delimitadores.**
+2.  **Escapado para JSON (CRÍTICO):** Para que el JSON sea válido, debes escapar las barras invertidas de LaTeX.
+    *   **Regla General:** Un comando con una sola barra invertida como \\frac o \\rightarrow debe escribirse con una **doble barra invertida** en la cadena JSON. Por ejemplo: "\\\\frac" o "\\\\rightarrow".
+    *   **Regla para Saltos de Línea:** El comando de salto de línea de LaTeX, que son dos barras seguidas (\\\\), debe escribirse con **cuatro barras invertidas** en la cadena JSON. Por ejemplo: "\\\\\\\\".
+
+Ejemplos correctos para el JSON:
+*   **Fracción:** Para renderizar \$ \\frac{1}{2} \$, la cadena JSON debe ser: "\$ \\\\frac{1}{2} \$".
+*   **Reacción Química:** Para renderizar \$ CH_4 + 2O_2 \\rightarrow CO_2 + 2H_2O \$, la cadena JSON debe ser: "\$ CH_4 + 2O_2 \\\\rightarrow CO_2 + 2H_2O \$".
+*   **Matriz:** Para renderizar \$\$ \\begin{pmatrix} a & b \\\\ c & d \\end{pmatrix} \$\$, la cadena JSON debe ser: "\$\$ \\\\begin{pmatrix} a & b \\\\\\\\ c & d \\\\end{pmatrix} \$\$".
+
+El formato de cada objeto JSON debe ser estrictamente: {"type": "${type}", "question": "...", "options": [], "correctAnswer": "..."}.
+Responde ÚNICAMENTE con el array JSON.`;
+            const response = await fetch(API_URL, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }) });
+            if (!response.ok) throw new Error(`API falló.`);
+
+            const data = await response.json();
+            const jsonText = data.candidates?.[0]?.content?.parts?.[0]?.text.match(/\[[\s\S]*\]/)[0];
+            const newQuestions = JSON.parse(jsonText).map((q, i) => ({ ...q, type, id: `q-missing-${type}-${Date.now()}-${i}` }));
+            
+            section.questions.push(...newQuestions);
+            showMessage(`Se añadieron ${newQuestions.length} preguntas nuevas.`, 'success');
+
+        } catch (error) {
+            showMessage(`Error generando preguntas: ${error.message}`, 'error');
+        } finally {
+            renderReviewQuestions(); 
+        }
+    }
+
+
+    function openReviewModal(content, difficulty) { appState.teacherTemplate.currentReview = { content, difficulty }; const modal = document.getElementById('question-review-modal-overlay'); const contentSelect = document.getElementById('review-content-select'); const difficultySelect = document.getElementById('review-difficulty-select-nav'); contentSelect.innerHTML = Object.keys(appState.teacherTemplate.questionPool).map(c => `<option value="${c}" ${c === content ? 'selected' : ''}>${c.split(':').pop().trim()}</option>`).join(''); difficultySelect.innerHTML = allDifficulties.map(d => `<option value="${d}" ${d === difficulty ? 'selected' : ''}>${d.replace('_', ' ')}</option>`).join(''); renderReviewQuestions(); modal.style.display = 'flex'; }
+    
+    function renderReviewQuestions() {
+        const { content, difficulty } = appState.teacherTemplate.currentReview;
+        const listContainer = document.getElementById('review-question-list');
+        const configControlsContainer = document.getElementById('review-config-controls');
+        const data = appState.teacherTemplate.questionPool[content]?.[difficulty];
+
+        configControlsContainer.innerHTML = '';
+        listContainer.innerHTML = '';
+
+        if (!data) {
+            listContainer.innerHTML = `<p class="text-center text-gray-500">No hay preguntas configuradas para esta sección.</p>`;
+            updateReviewCounter();
+            return;
+        }
+
+        if (data.questions.length === 0 && Object.keys(data.required).some(k => data.required[k] > 0)) {
+             listContainer.innerHTML = `
+                <div class="text-center p-8">
+                    <p class="mb-4 text-gray-600">No se han generado preguntas para esta sección.</p>
+                    <button class="action-button generate-section-questions-btn" data-content="${content}" data-difficulty="${difficulty}">
+                        <i class="fas fa-magic mr-2"></i>Generar Banco de Preguntas
+                    </button>
+                </div>`;
+        } else {
+            listContainer.innerHTML = data.questions.map(q => `
+                <div class="review-question-item ${data.selected.includes(q.id) ? 'selected' : ''}" id="review-${q.id}">
+                    <div class="flex justify-between items-start">
+                        <div class="flex-grow">
+                            <p class="question-text"><em>(${q.type.replace('_',' ')})</em> ${q.question}</p>
+                            <ol class="options-list">${q.options.map(opt => `<li>${opt}</li>`).join('')}</ol>
+                            <p class="correct-answer">Respuesta Correcta: ${q.correctAnswer}</p>
+                        </div>
+                        <input type="checkbox" class="ml-4 h-5 w-5" data-question-id="${q.id}" ${data.selected.includes(q.id) ? 'checked' : ''}>
+                    </div>
+                    <div class="review-question-item-actions">
+                        <button class="action-btn edit" data-question-id="${q.id}">✏️ Editar</button>
+                        <button class="action-btn discard" data-question-id="${q.id}">🗑️ Descartar</button>
+                        <button class="action-btn regenerate" data-question-id="${q.id}">🔄 Regenerar</button>
+                    </div>
+                </div>`).join('');
+        }
+        
+        let controlsHTML = '<h5>Configurar y Seleccionar:</h5>';
+        const allTypesInPool = new Set(Object.keys(data.required));
+        data.questions.forEach(q => allTypesInPool.add(q.type));
+        
+        allTypesInPool.forEach(type => {
+            const requiredCount = data.required[type] || 0;
+            const selectedOfType = data.selected.filter(id => data.questions.find(q=>q.id===id)?.type === type).length;
+            const availableOfType = data.questions.filter(q => q.type === type).length;
+            const needed = requiredCount - availableOfType;
+
+            controlsHTML += `
+                <div class="review-config-row">
+                    <label for="req-count-${type}">${type.replace('_', ' ')}:</label>
+                    <span>Seleccionadas <strong>${selectedOfType}</strong> de </span>
+                    <input type="number" min="0" max="10" value="${requiredCount}" class="required-question-count-input" data-type="${type}" data-content="${content}" data-difficulty="${difficulty}" id="req-count-${type}">
+                    <span>(Disponibles: ${availableOfType})</span>
+                    <button class="btn-generate-missing" data-type="${type}" data-content="${content}" data-difficulty="${difficulty}" data-needed="${needed}" style="${needed > 0 ? 'display: inline-block;' : 'display: none;'}">
+                        Generar Faltantes
+                    </button>
+                </div>`;
+        });
+        configControlsContainer.innerHTML = controlsHTML;
+
+        updateReviewCounter();
+        safeTypesetMathJax(Promise.resolve([listContainer, configControlsContainer]));
+    }
+
+
+    function updateReviewCounter() {
+        const finalizeButtonContainer = document.getElementById('finalize-button-container');
+        const finalizeButton = document.getElementById('finalize-template-fixed-button');
+        let missingSections = [];
+
+        for (const c in appState.teacherTemplate.questionPool) {
+            for (const d in appState.teacherTemplate.questionPool[c]) {
+                const section = appState.teacherTemplate.questionPool[c][d];
+                if (section.questions.length === 0 && Object.values(section.required).some(v => v > 0)) {
+                    missingSections.push(`${c.split(':').pop().trim()} (${d})`);
+                }
+            }
+        }
+        
+        if (missingSections.length > 0) {
+            finalizeButton.disabled = true;
+            let tooltip = finalizeButtonContainer.querySelector('.tooltip-text');
+            if (!tooltip) {
+                tooltip = document.createElement('span');
+                tooltip.className = 'tooltip-text';
+                finalizeButtonContainer.appendChild(tooltip);
+            }
+            tooltip.textContent = `Falta generar preguntas para:\n- ${missingSections.slice(0, 4).join('\n- ')}${missingSections.length > 4 ? '\n- ...y más' : ''}`;
+        } else {
+            finalizeButton.disabled = false;
+            let tooltip = finalizeButtonContainer.querySelector('.tooltip-text');
+            if (tooltip) {
+                tooltip.remove();
+            }
+        }
+    }
+
+
+    function handleReviewSelection(e) { const { content, difficulty } = appState.teacherTemplate.currentReview; const data = appState.teacherTemplate.questionPool[content][difficulty]; const questionId = e.target.dataset.questionId; const question = data.questions.find(q => q.id === questionId); if (!question) return; if (e.target.checked) { data.selected.push(questionId); } else { data.selected = data.selected.filter(id => id !== questionId); } document.getElementById(`review-${questionId}`).classList.toggle('selected', e.target.checked); renderReviewQuestions(); }
+    function openEditModal(questionId) { const { content, difficulty } = appState.teacherTemplate.currentReview; const question = appState.teacherTemplate.questionPool[content][difficulty].questions.find(q => q.id === questionId); if (!question) return; appState.teacherTemplate.currentEdit = { content, difficulty, questionId }; document.getElementById('edit-question-text').value = question.question; document.getElementById('edit-options-text').value = question.options.join('\n'); document.getElementById('edit-answer-text').value = question.correctAnswer; document.getElementById('edit-question-modal-overlay').style.display = 'flex'; }
+    function handleSaveEdit(e) { e.preventDefault(); const { content, difficulty, questionId } = appState.teacherTemplate.currentEdit; const pool = appState.teacherTemplate.questionPool[content][difficulty]; const questionIndex = pool.questions.findIndex(q => q.id === questionId); pool.questions[questionIndex].question = document.getElementById('edit-question-text').value; pool.questions[questionIndex].options = document.getElementById('edit-options-text').value.split('\n').map(o => o.trim()).filter(Boolean); pool.questions[questionIndex].correctAnswer = document.getElementById('edit-answer-text').value; document.getElementById('edit-question-modal-overlay').style.display = 'none'; renderReviewQuestions(); }
+    function openRegenerateModal(questionId) { const { content, difficulty } = appState.teacherTemplate.currentReview; const question = appState.teacherTemplate.questionPool[content][difficulty].questions.find(q => q.id === questionId); if (!question) return; appState.teacherTemplate.currentRegenerate = { content, difficulty, questionId }; const teacherLevelSelect = document.getElementById('teacher-level'); const levelText = teacherLevelSelect.options[teacherLevelSelect.selectedIndex].text; const defaultPrompt = `Regenera una nueva pregunta de tipo "${question.type.replace('_',' ')}" sobre "${content}" para el nivel ${levelText} (dificultad: ${difficulty}). La pregunta anterior era: "${question.question}". Intenta que sea conceptualmente diferente.`; document.getElementById('regenerate-prompt-text').value = defaultPrompt; document.getElementById('regenerate-modal-overlay').style.display = 'flex'; }
+    async function handleRegenerateQuestion() { const { content, difficulty, questionId } = appState.teacherTemplate.currentRegenerate; 
+const button = document.getElementById('confirm-regenerate-button'); 
+button.disabled = true; 
+button.innerHTML = `<span class="spinner"></span> Regenerando...`; 
+const reviewItem = document.getElementById(`review-${questionId}`); 
+if(reviewItem) reviewItem.style.opacity = '0.5'; 
+try { const userPrompt = document.getElementById('regenerate-prompt-text').value; const question = appState.teacherTemplate.questionPool[content][difficulty].questions.find(q => q.id === questionId); 
+const teacherLevelSelect = document.getElementById('teacher-level'); 
+const levelText = teacherLevelSelect.options[teacherLevelSelect.selectedIndex].text; 
+
+const prompt = `Genera un ÚNICO objeto JSON para una pregunta de examen. Contexto académico: ${levelText}. ${userPrompt}
+
+Instrucciones para LaTeX (CRÍTICO para visualización correcta):
+1.  Usa delimitadores estándar: \`$ ... $\` para matemáticas en línea y \`$$ ... $$\` para matemáticas en pantalla. **TODO el contenido matemático debe estar dentro de estos delimitadores.**
+2.  **Escapado para JSON (CRÍTICO):** Para que el JSON sea válido, debes escapar las barras invertidas de LaTeX.
+    *   **Regla General:** Un comando con una sola barra invertida como \\frac o \\rightarrow debe escribirse con una **doble barra invertida** en la cadena JSON. Por ejemplo: "\\\\frac" o "\\\\rightarrow".
+    *   **Regla para Saltos de Línea:** El comando de salto de línea de LaTeX, que son dos barras seguidas (\\\\), debe escribirse con **cuatro barras invertidas** en la cadena JSON. Por ejemplo: "\\\\\\\\".
+
+Ejemplos correctos para el JSON:
+*   **Fracción:** Para renderizar \$ \\frac{1}{2} \$, la cadena JSON debe ser: "\$ \\\\frac{1}{2} \$".
+*   **Reacción Química:** Para renderizar \$ CH_4 + 2O_2 \\rightarrow CO_2 + 2H_2O \$, la cadena JSON debe ser: "\$ CH_4 + 2O_2 \\\\rightarrow CO_2 + 2H_2O \$".
+*   **Matriz:** Para renderizar \$\$ \\begin{pmatrix} a & b \\\\ c & d \\end{pmatrix} \$\$, la cadena JSON debe ser: "\$\$ \\\\begin{pmatrix} a & b \\\\\\\\ c & d \\\\end{pmatrix} \$\$".
+
+El formato del objeto JSON debe ser estrictamente: {"question": "...", "options": [], "correctAnswer": "..."}. El tipo debe ser "${question.type}".
+Responde ÚNICAMENTE con el objeto JSON (no un array).`;
+
+const response = await fetch(API_URL, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }) }); if (!response.ok) throw new Error("API response not OK"); const data = await response.json(); const jsonText = data.candidates?.[0]?.content?.parts?.[0]?.text.match(/\{[\s\S]*\}/)[0]; const newQuestion = JSON.parse(jsonText); const pool = appState.teacherTemplate.questionPool[content][difficulty]; const questionIndex = pool.questions.findIndex(q => q.id === questionId); pool.questions[questionIndex] = { ...newQuestion, type: question.type, id: questionId }; } catch(error) { showMessage(`Error al regenerar la pregunta: ${error.message}`, 'error'); } finally { button.disabled = false; button.innerHTML = `Generar Nueva Pregunta`; document.getElementById('regenerate-modal-overlay').style.display = 'none'; renderReviewQuestions(); } }
+    function getTeacherConfiguration(includeQuestions = false) { const baseConfig = { type: 'teacher-template', passingScore: parseFloat(document.getElementById('passing-score').value) || 5, maxScore: parseInt(document.getElementById('max-score').value) || 10, penalty: parseFloat(document.getElementById('penalty-score').value) || 0, level: document.getElementById('teacher-level').value, contents: getTeacherSelectedContents(), difficulties: {}, }; allDifficulties.forEach(diffKey => { const container = document.getElementById(`config-${diffKey}`); const types = {}; container.querySelectorAll('.question-type-row').forEach(row => { const type = row.querySelector('.question-type-select').value; const count = parseInt(row.querySelector('.question-type-count').value); if (count > 0) types[type] = (types[type] || 0) + count; }); baseConfig.difficulties[diffKey] = types; }); if (includeQuestions) { baseConfig.questions = {}; for (const content in appState.teacherTemplate.questionPool) { baseConfig.questions[content] = {}; for (const difficulty in appState.teacherTemplate.questionPool[content]) { const pool = appState.teacherTemplate.questionPool[content][difficulty]; baseConfig.questions[content][difficulty] = pool.selected.map(id => { const {id: qid, ...rest} = pool.questions.find(q => q.id === id); return rest; }); } } } return baseConfig; }
+    
+    function finalizeAndGenerateCode(isFixed) {
+        if (!isFixed) {
+            const dynamicConfig = getTeacherConfiguration(false);
+            const configString = JSON.stringify(dynamicConfig);
+            document.getElementById('output-teacher-code').value = btoa(encodeURIComponent(configString));
+            document.getElementById('generated-code-area').style.display = 'block';
+            showMessage(`Plantilla dinámica generada con éxito.`, "success");
+            return;
+        }
+
+        const finalConfig = getTeacherConfiguration(true);
+        const liveConfig = appState.teacherTemplate.questionPool; 
+
+        finalConfig.difficulties = {};
+        for (const content in liveConfig) {
+            for (const difficulty in liveConfig[content]) {
+                if (!finalConfig.difficulties[difficulty]) finalConfig.difficulties[difficulty] = {};
+                const section = liveConfig[content][difficulty];
+                Object.assign(finalConfig.difficulties[difficulty], section.required);
+            }
+        }
+        for (const diff in finalConfig.difficulties) {
+            for (const type in finalConfig.difficulties[diff]) {
+                if (finalConfig.difficulties[diff][type] === 0) {
+                    delete finalConfig.difficulties[diff][type];
+                }
+            }
+        }
+
+        const configString = JSON.stringify(finalConfig);
+        document.getElementById('output-teacher-code').value = btoa(encodeURIComponent(configString));
+        document.getElementById('generated-code-area').style.display = 'block';
+        if (document.getElementById('question-review-modal-overlay').style.display === 'flex') {
+            document.getElementById('question-review-modal-overlay').style.display = 'none';
+        }
+        showMessage(`Plantilla fija generada con éxito.`, "success");
+    }
+
+    function renderTeacherConfig() { const container = document.getElementById('difficulty-configs-container'); container.innerHTML = ''; const difficultiesText = ['Básico', 'Fácil', 'Medio', 'Difícil', 'Muy Difícil']; difficultiesText.forEach(diff => { const diffKey = diff.toLowerCase().replace(/ /g, '_'); const block = document.createElement('div'); block.className = 'difficulty-config-block'; block.innerHTML = ` <h4 class="font-bold text-lg mb-2">${diff}</h4> <div id="config-${diffKey}"> <div class="question-type-row"> <select class="question-type-select">${questionTypes.map(t => `<option value="${t}">${t.replace('_', ' ')}</option>`).join('')}</select> <input type="number" class="question-type-count" value="10" min="0"> <button class="remove-type-button text-red-500 text-xl font-bold">×</button> </div> </div> <button class="add-type-button text-sm mt-2 text-blue-600 hover:text-blue-800" data-diff="${diffKey}">+ Añadir tipo de pregunta</button>`; container.appendChild(block); }); populateTeacherSubjects(); }
+    function populateTeacherSubjects() { const levelSelect = document.getElementById('teacher-level'); const subjectsArea = document.getElementById('teacher-subjects-area'); const topicsArea = document.getElementById('teacher-topics-area'); const selectedLevelKey = levelSelect.value; document.getElementById('teacher-carrera-input-group').style.display = selectedLevelKey === 'universidad' ? 'flex' : 'none'; document.getElementById('teacher-fp-title-input-group').style.display = selectedLevelKey.startsWith('fp_') ? 'flex' : 'none'; document.getElementById('teacher-custom-subject-name').style.display = 'none'; subjectsArea.innerHTML = ''; topicsArea.innerHTML = '<p class="text-gray-500">Selecciona asignaturas para ver contenidos.</p>'; isTeacherSubjectsAreaPopulatedFromAutomation = false; if (selectedLevelKey === 'universidad') { subjectsArea.innerHTML = '<p class="text-gray-500">Busca asignaturas por carrera.</p>'; } else if (selectedLevelKey.startsWith('fp_')) { subjectsArea.innerHTML = '<p class="text-gray-500">Busca módulos por título.</p>'; } else { const subjectsFromCurriculum = simulatedCurriculum[selectedLevelKey]?.subjects || []; subjectsFromCurriculum.forEach(subject => { const div = document.createElement('div'); div.innerHTML = `<label class="flex items-center"><input type="checkbox" class="subject-checkbox mr-2" value="${subject}">${subject}</label>`; subjectsArea.appendChild(div); }); } addOtherSubjectOption(subjectsArea, 'teacher-custom-subject-name', true); subjectsArea.querySelectorAll('.subject-checkbox').forEach(cb => cb.addEventListener('change', populateTeacherTopics)); }
+    function populateTeacherSubjectsFromList(subjectsList) { const subjectsArea = document.getElementById('teacher-subjects-area'); subjectsArea.innerHTML = ''; if (subjectsList.length === 0) { subjectsArea.innerHTML = '<p class="text-gray-500">No se encontraron asignaturas.</p>'; } else { subjectsList.forEach(subject => { const div = document.createElement('div'); div.innerHTML = `<label class="flex items-center"><input type="checkbox" class="subject-checkbox mr-2" value="${subject}">${subject}</label>`; subjectsArea.appendChild(div); }); } addOtherSubjectOption(subjectsArea, 'teacher-custom-subject-name', true); subjectsArea.querySelectorAll('.subject-checkbox').forEach(cb => cb.addEventListener('change', populateTeacherTopics)); isTeacherSubjectsAreaPopulatedFromAutomation = true; }
+    function getTeacherSelectedSubjects() { const subjectsArea = document.getElementById('teacher-subjects-area'); const customInput = document.getElementById('teacher-custom-subject-name'); let selSubs = Array.from(subjectsArea.querySelectorAll('.subject-checkbox:checked')).map(cb => cb.value); const otherCb = document.getElementById('teacher-other-subject-checkbox'); const customName = customInput.value.trim(); if (otherCb?.checked && customName) { selSubs = selSubs.filter(s => s !== 'Otras').concat(customName); } else if (otherCb?.checked) { selSubs = selSubs.filter(s => s !== 'Otras'); } return selSubs; }
+    function populateTeacherTopics() { const levelSelect = document.getElementById('teacher-level'); const subjectsArea = document.getElementById('teacher-subjects-area'); const topicsArea = document.getElementById('teacher-topics-area'); topicsArea.innerHTML = ''; const selectedLevelKey = levelSelect.value; const selectedSubjects = Array.from(subjectsArea.querySelectorAll('.subject-checkbox:checked:not(#teacher-other-subject-checkbox)')).map(cb => cb.value); if (selectedSubjects.length === 0) { topicsArea.innerHTML = '<p class="text-gray-500">Selecciona asignatura para ver temas.</p>'; return; } selectedSubjects.forEach(subject => { const contents = simulatedCurriculum[selectedLevelKey]?.contents?.[subject] || {}; const themes = Object.keys(contents); if(themes.length > 0) { const title = document.createElement('div'); title.className = 'subject-group-title'; title.textContent = subject; topicsArea.appendChild(title); themes.forEach(theme => { const value = `${subject}: ${theme}`; topicsArea.innerHTML += `<label><input type="checkbox" class="topic-checkbox" value="${value}">${theme}</label>`; }); } }); }
+    function getTeacherSelectedContents() { const fromCheckboxes = Array.from(document.querySelectorAll('#teacher-topics-area .topic-checkbox:checked')).map(cb => cb.value); const fromTextarea = document.getElementById('teacher-custom-contents-area').value.split('\n').map(line => line.trim()).filter(Boolean); return [...new Set([...fromCheckboxes, ...fromTextarea])]; }
+    function addQuestionTypeRow(diffKey) { const container = document.getElementById(`config-${diffKey}`); const row = document.createElement('div'); row.className = 'question-type-row'; row.innerHTML = `<select class="question-type-select">${questionTypes.map(t => `<option value="${t}">${t.replace('_',' ')}</option>`).join('')}</select><input type="number" class="question-type-count" value="0" min="0"><button class="remove-type-button text-red-500 text-xl font-bold">×</button>`; container.appendChild(row); }
+    function applyTeacherCode() { const code = teacherCodeInput.value.trim(); if (!code) { appState.professorConfig = null; if (!document.body.classList.contains('teacher-mode-active')) { customContentsArea.value = ''; } renderProgressGrid(); showMessage("Se usará la configuración automatizada por defecto.", "info"); return; } try { const config = JSON.parse(decodeURIComponent(atob(code))); if (config.type !== 'teacher-template') throw new Error("Código no es una plantilla."); resetAppState(); appState.professorConfig = config; customContentsArea.value = [...new Set(config.contents)].join('\n'); logActivity("Plan de estudio cargado desde código."); showMessage("Plan de estudio cargado. Introduce tu nombre para empezar.", "success"); renderProgressGrid(); } catch (error) { appState.professorConfig = null; renderProgressGrid(); showMessage("Código del profesor inválido.", "error"); } }
+    function populateDifficultySelect(selectElement) { selectElement.innerHTML = ''; const allOption = document.createElement('option'); allOption.value = 'all'; allOption.textContent = 'Todas las Dificultades (Suma)'; selectElement.appendChild(allOption); const difficultiesText = ['Básico', 'Fácil', 'Medio', 'Difícil', 'Muy Difícil']; difficultiesText.forEach(diff => { const option = document.createElement('option'); option.value = diff.toLowerCase().replace(/ /g, '_'); option.textContent = diff; selectElement.appendChild(option); }); }
+    function renderStatsChart(canvasId, contents, progressData, config, selectedDifficulty, chartType, onRenderCallback) { const canvas = document.getElementById(canvasId); let chartInstance = canvasId === 'stats-chart' ? statsChart : revisionChart; if (!canvas) return; if (chartInstance) chartInstance.destroy(); if (!selectedDifficulty || contents.length === 0) return; const labels = contents.map(c => c.split(':').pop().trim()); let scores = []; let maxScore = 10; let chartLabel = ''; const baseConfig = config || { maxScore: 10 }; if (selectedDifficulty === 'all') { maxScore = baseConfig.maxScore * allDifficulties.length; chartLabel = 'Puntuación Total (Suma)'; scores = contents.map(content => allDifficulties.reduce((total, diffKey) => total + (progressData[content]?.[diffKey]?.score ?? 0), 0)); } else { maxScore = baseConfig.maxScore; const diffText = selectedDifficulty.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()); chartLabel = `Puntuación en Nivel ${diffText}`; scores = contents.map(content => progressData[content]?.[selectedDifficulty]?.score ?? 0); } const newChart = new Chart(canvas.getContext('2d'), { type: chartType, data: { labels, datasets: [{ label: chartLabel, data: scores, backgroundColor: 'hsla(40, 80%, 60%, 0.2)', borderColor: 'hsl(40, 80%, 60%)', pointBackgroundColor: 'hsl(40, 80%, 60%)', borderWidth: 2 }] }, options: { responsive: true, maintainAspectRatio: false, scales: { r: { display: chartType === 'radar', suggestedMin: 0, suggestedMax: maxScore, pointLabels: { font: { size: 10 } }, ticks: { backdropColor: 'transparent' } }, y: { display: chartType === 'bar', beginAtZero: true, max: maxScore } }, plugins: { legend: { position: 'top' }, tooltip: { callbacks: { label: (context) => `${context.dataset.label}: ${context.raw}/${maxScore}` } } } } }); if (onRenderCallback) onRenderCallback(newChart); }
+    function generateStudentReportCode() { const studentNameInput = document.getElementById('student-name-input'); const newName = studentNameInput.value.trim(); if (!newName) { showMessage("Por favor, introduce tu nombre para generar el reporte.", "warning"); return; } if (!appState.studentProfile.initialName) appState.studentProfile.initialName = newName; else if (appState.studentProfile.currentName !== newName) logActivity(`Nombre cambiado de "${appState.studentProfile.currentName}" a "${newName}".`); appState.studentProfile.currentName = newName; logActivity("Código de reporte generado."); saveProgress(); const encodedReport = btoa(encodeURIComponent(JSON.stringify(appState))); document.getElementById('student-report-code').value = encodedReport; document.getElementById('student-report-output-area').style.display = 'block'; showMessage("Código de reporte generado con éxito.", "success"); }
+    function processStudentReportData(data) { const displayArea = document.getElementById('revision-display-area'); try { if (!data.studentProfile || !data.progressData || !data.activityLog) throw new Error("El archivo no es un reporte de progreso válido."); loadedStudentData = data; const studentName = data.studentProfile.currentName || data.studentProfile.initialName; const nameHistory = data.studentProfile.initialName === studentName ? '' : ` (Nombre inicial: ${data.studentProfile.initialName})`; document.getElementById('revision-student-name').textContent = `${studentName}${nameHistory}`; document.getElementById('revision-level').textContent = data.professorConfig?.level || "No especificado"; document.getElementById('revision-subjects').textContent = (data.professorConfig?.subjects || []).join(', '); const contents = data.professorConfig?.contents || []; renderRevisionGrid(contents, data.progressData, data.professorConfig); const logContainer = document.getElementById('activity-log-container'); logContainer.innerHTML = data.activityLog.map(log => `<p><span class="text-gray-500">${new Date(log.timestamp).toLocaleString()}:</span> ${log.event}</p>`).join(''); const config = data.professorConfig || { passingScore: 5, maxScore: 10, penalty: 0, difficulties: 'Modo Automático' }; document.getElementById('revision-config-details').innerHTML = `<p><strong>Nota para Aprobar:</strong> ${config.passingScore}</p><p><strong>Puntuación Máxima:</strong> ${config.maxScore}</p><p><strong>Penalización por Fallo:</strong> ${config.penalty}</p>`; populateDifficultySelect(revisionDifficultySelect); displayArea.style.display = 'block'; document.getElementById('ai-report-output').innerHTML = ''; showMessage("Datos del alumno cargados correctamente.", "success"); } catch (error) { displayArea.style.display = 'none'; showMessage(`Error al procesar los datos: ${error.message}`, "error"); console.error("Error al procesar reporte:", error); } }
+    function loadAndDisplayStudentDataFromCode() { const code = document.getElementById('student-code-paste-area').value.trim(); if (!code) { showMessage("Pega el código del alumno.", "warning"); return; } try { const data = JSON.parse(decodeURIComponent(atob(code))); processStudentReportData(data); } catch (error) { showMessage("Código de reporte inválido.", "error"); } }
+    function loadAndDisplayStudentDataFromFile(event) { const file = event.target.files[0]; if (!file) return; const reader = new FileReader(); reader.onload = function(e) { try { const data = JSON.parse(e.target.result); processStudentReportData(data); } catch (error) { showMessage(`Error al leer el archivo: ${error.message}`, "error"); } finally { document.getElementById('load-student-file-input').value = ''; } }; reader.readAsText(file); }
+    function renderRevisionGrid(contents, progressData, config) { const grid = document.getElementById('revision-progress-grid'); const difficultiesText = ['Básico', 'Fácil', 'Medio', 'Difícil', 'Muy Difícil']; let gridHTML = '<div class="grid-header">Contenidos</div>'; difficultiesText.forEach(d => gridHTML += `<div class="grid-header">${d}</div>`); const baseConfig = config || { passingScore: 5, maxScore: 10 }; const { passingScore, maxScore } = baseConfig; contents.forEach(content => { const displayName = content.split(':').pop().trim(); gridHTML += `<div class="content-label">${displayName}</div>`; allDifficulties.forEach(diffKey => { const data = progressData[content]?.[diffKey]; let cellClass = 'status-not-started'; let cellText = 'No Iniciado'; if (data) { cellClass = data.score >= passingScore ? 'status-passed' : 'status-failed'; cellText = `${data.score}/${maxScore}`; gridHTML += `<div><button class="level-button ${cellClass}" data-content="${content}" data-difficulty="${diffKey}">${cellText}</button></div>`; } else { gridHTML += `<div><div class="level-button ${cellClass}" style="cursor:default;">${cellText}</div></div>`; } }); }); grid.innerHTML = gridHTML; }
+    function showRevisionQuizDetail(content, difficulty) { const attempt = loadedStudentData.quizAttempts.slice().reverse().find(a => a.content === content && a.difficulty === difficulty); if (!attempt) { showMessage("No se encontraron detalles para este intento.", "warning"); return; } const modal = document.getElementById('revision-quiz-detail-modal-overlay'); const container = document.getElementById('revision-quiz-detail-content'); container.innerHTML = `<h4>Último intento (${new Date(attempt.timestamp).toLocaleString()}) - Nota: ${attempt.score}</h4>` + attempt.questionsAndAnswers.map((item, index) => { return `<div class="mb-4"><p class="revision-quiz-question"><strong>${index + 1}. ${item.question}</strong></p><div>${item.options.map(opt => `<div class="revision-quiz-option ${opt.trim().toLowerCase() === item.correctAnswer.trim().toLowerCase() ? 'correct-answer' : ''} ${opt.trim().toLowerCase() === item.userAnswer.trim().toLowerCase() ? (item.isCorrect ? 'user-correct' : 'user-incorrect') : ''}">${opt}</div>`).join('')}</div></div>`; }).join(''); modal.style.display = 'flex'; safeTypesetMathJax(Promise.resolve(container)); }
+    
+    async function generateAIReport() {
+        if (!loadedStudentData) return;
+        const button = document.getElementById('generate-ai-report-button');
+        button.disabled = true;
+        button.innerHTML = '<span class="spinner"></span> Analizando...';
+        const outputDiv = document.getElementById('ai-report-output');
+        outputDiv.innerHTML = '<p class="text-center">Generando informe...</p>';
+
+        try {
+            const timeAnalysis = [];
+            const activityLog = loadedStudentData.activityLog || [];
+            const endedQuizzes = activityLog.filter(log => log.event.startsWith('Finalizó test:'));
+            
+            for (const endLog of endedQuizzes) {
+                const match = endLog.event.match(/"([^"]+)" - (\w+)\./);
+                if (match) {
+                    const contentName = match[1];
+                    const difficulty = match[2];
+                    const startLog = activityLog.slice().reverse().find(log => log.event === `Inició test: "${contentName}" - ${difficulty}.`);
+                    if (startLog) {
+                        const durationMs = new Date(endLog.timestamp) - new Date(startLog.timestamp);
+                        if(durationMs > 0){
+                            const minutes = Math.floor(durationMs / 60000);
+                            const seconds = ((durationMs % 60000) / 1000).toFixed(0);
+                            timeAnalysis.push(`- Test "${contentName}" (${difficulty}): ${minutes} min ${seconds} s.`);
+                        }
+                    }
+                }
+            }
+            const timeSummary = timeAnalysis.length > 0 ? timeAnalysis.join('\n') : 'No hay datos de tiempo de finalización.';
+
+            const studentName = loadedStudentData.studentProfile.currentName || loadedStudentData.studentProfile.initialName;
+            const nameChangeInfo = loadedStudentData.studentProfile.initialName !== studentName ? `Se ha detectado un cambio de nombre de "${loadedStudentData.studentProfile.initialName}" a "${studentName}".` : "";
+            const scoresSummary = (loadedStudentData.professorConfig?.contents || []).map(c => { const contentName = c.split(':').pop().trim(); const scores = allDifficulties.map(d => loadedStudentData.progressData[c]?.[d] ? `${d}: ${loadedStudentData.progressData[c][d].score}/10` : '').filter(Boolean).join(', '); return `- ${contentName}: ${scores || 'No intentado'}`; }).join('\n');
+            const keyErrors = loadedStudentData.quizAttempts.flatMap(a => a.questionsAndAnswers).filter(qa => !qa.isCorrect).slice(0, 5).map(qa => `- Pregunta sobre "${qa.question.substring(0, 50)}...", respondió "${qa.userAnswer}" en lugar de "${qa.correctAnswer}".`).join('\n');
+            const teacherInstructions = document.getElementById('ai-report-instructions').value;
+            
+            const prompt = `Eres un asistente pedagógico experto. Analiza los datos de un alumno y redacta un informe para su profesor. Sé conciso, constructivo y usa Markdown. Incluye expresiones LaTeX si es relevante para explicar un error.
+            DATOS DEL ALUMNO:
+            - Nombre: ${studentName}. ${nameChangeInfo}
+            - Resumen de Puntuaciones:\n${scoresSummary}
+            - Datos de Tiempo de Dedicación (calculado del registro de actividad):\n${timeSummary}
+            - Errores Clave de Ejemplo:\n${keyErrors || 'Ninguno'}
+
+            INSTRUCCIONES:
+            Analiza el rendimiento del alumno, considerando tanto las notas como el tiempo de dedicación proporcionado. Estructura tu respuesta en Markdown con estas secciones:
+            1. **Resumen General:** Breve análisis del rendimiento.
+            2. **Puntos Fuertes:** Temas o dificultades donde destaca.
+            3. **Áreas de Mejora:** Dónde están las debilidades. Sé específico, si ves un error conceptual en los ejemplos (ej. $2^3=6$), menciónalo.
+            4. **Recomendaciones Pedagógicas:** Acciones concretas y personalizadas.
+            
+            INDICACIONES ADICIONALES DEL DOCENTE (si las hay, úsalas como guía principal):\n${teacherInstructions || "Ninguna"}`;
+            
+            const response = await fetch(API_URL, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }) });
+            if (!response.ok) throw new Error("API response not OK");
+            const data = await response.json();
+            const resultText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+            outputDiv.innerHTML = parseMarkdownWhileProtectingLatex(resultText);
+            safeTypesetMathJax(Promise.resolve(outputDiv));
+        } catch (error) {
+            outputDiv.innerHTML = `<p class="text-red-500">Error al generar el informe: ${error.message}</p>`;
+        } finally {
+            button.disabled = false;
+            button.innerHTML = 'Generar Informe';
+        }
+    }
+
+    function toggleActivityLogInInstructions() {
+        const checkbox = document.getElementById('include-activity-log-checkbox');
+        const textarea = document.getElementById('ai-report-instructions');
+        const logContainer = document.getElementById('activity-log-container');
+        const logHeader = "--- REGISTRO DE ACTIVIDAD COMPLETO ---\n";
+        const logFooter = "\n--- FIN REGISTRO DE ACTIVIDAD ---\n\n";
+        const logBlockRegex = new RegExp(logHeader + "[\\s\\S]*" + logFooter, "g");
+
+        let currentText = textarea.value.replace(logBlockRegex, '');
+
+        if (checkbox.checked) {
+            const logText = logContainer.innerText;
+            if (logText) {
+                textarea.value = logHeader + logText + logFooter + currentText;
+            }
+        } else {
+            textarea.value = currentText;
+        }
+    }
+
+    function saveDraftTemplate() {
+        if (Object.keys(appState.teacherTemplate.questionPool).length === 0) {
+            showMessage("No has iniciado la creación de una plantilla fija. No hay nada que guardar.", "warning");
+            return;
+        }
+
+        const draft = {
+            type: 'teacher-template-draft',
+            level: document.getElementById('teacher-level').value,
+            passingScore: parseFloat(document.getElementById('passing-score').value),
+            maxScore: parseInt(document.getElementById('max-score').value),
+            penalty: parseFloat(document.getElementById('penalty-score').value),
+            contents: getTeacherSelectedContents(),
+            questionPool: appState.teacherTemplate.questionPool,
+            difficulties: getTeacherConfiguration(false).difficulties
+        };
+
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(draft, null, 2));
+        const downloadAnchorNode = document.createElement('a');
+        downloadAnchorNode.setAttribute("href", dataStr);
+        downloadAnchorNode.setAttribute("download", `borrador_plantilla_${new Date().toISOString().split('T')[0]}.json`);
+        document.body.appendChild(downloadAnchorNode);
+        downloadAnchorNode.click();
+        downloadAnchorNode.remove();
+        showMessage("Borrador de la plantilla guardado.", "success");
+    }
+
+    function loadTeacherTemplateForEditing(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const data = JSON.parse(e.target.result);
+                let firstContent, firstDifficulty;
+
+                document.getElementById('teacher-level').value = data.level;
+                document.getElementById('passing-score').value = data.passingScore;
+                document.getElementById('max-score').value = data.maxScore;
+                document.getElementById('penalty-score').value = data.penalty;
+                document.getElementById('teacher-custom-contents-area').value = data.contents.join('\n');
+                
+                allDifficulties.forEach(diffKey => {
+                    const container = document.getElementById(`config-${diffKey}`);
+                    container.innerHTML = '';
+                    const difficultyConfig = data.difficulties[diffKey] || {};
+                    const typesInConfig = Object.keys(difficultyConfig);
+
+                    if(typesInConfig.length === 0) {
+                        addQuestionTypeRow(diffKey);
+                        container.querySelector('.question-type-count').value = 0;
+                    } else {
+                        typesInConfig.forEach(type => {
+                             addQuestionTypeRow(diffKey);
+                             const lastRow = container.querySelector('.question-type-row:last-child');
+                             lastRow.querySelector('.question-type-select').value = type;
+                             lastRow.querySelector('.question-type-count').value = difficultyConfig[type];
+                        });
+                    }
+                });
+
+                appState.teacherTemplate.questionPool = {};
+                if (data.type === 'teacher-template-draft' && data.questionPool) {
+                    data.contents.forEach(content => {
+                        appState.teacherTemplate.questionPool[content] = {};
+                        allDifficulties.forEach(difficulty => {
+                            const initialConfig = data.difficulties[difficulty];
+                            if (initialConfig && Object.keys(initialConfig).length > 0) {
+                                const loadedSection = data.questionPool[content]?.[difficulty];
+                                if (loadedSection) {
+                                    appState.teacherTemplate.questionPool[content][difficulty] = loadedSection;
+                                } else {
+                                    appState.teacherTemplate.questionPool[content][difficulty] = { questions: [], selected: [], required: { ...initialConfig } };
+                                }
+                            }
+                        });
+                    });
+                    
+                    showMessage("Borrador cargado. Puedes continuar con la edición.", "success");
+                    if (data.contents.length > 0) {
+                        firstContent = data.contents[0];
+                        firstDifficulty = allDifficulties.find(d => appState.teacherTemplate.questionPool[firstContent]?.[d]) || allDifficulties[0];
+                    }
+                } else if (data.type === 'teacher-template' && data.questions) {
+                    for (const content of data.contents) {
+                        appState.teacherTemplate.questionPool[content] = {};
+                        for (const difficulty of allDifficulties) {
+                            const questionsFromData = data.questions[content]?.[difficulty] || [];
+                            const requiredConfig = data.difficulties[difficulty] || {};
+                            if (Object.keys(requiredConfig).length === 0 && questionsFromData.length === 0) continue;
+                            const newQuestions = questionsFromData.map((q, i) => ({ ...q, id: `q-loaded-${difficulty}-${i}-${Date.now()}` }));
+                            const newSelectedIds = newQuestions.map(q => q.id);
+                            appState.teacherTemplate.questionPool[content][difficulty] = { questions: newQuestions, selected: newSelectedIds, required: requiredConfig };
+                        }
+                    }
+                    showMessage("Plantilla final cargada para editar.", "success");
+                    if (data.contents.length > 0) {
+                        firstContent = data.contents[0];
+                        firstDifficulty = allDifficulties.find(d => appState.teacherTemplate.questionPool[firstContent]?.[d]) || allDifficulties[0];
+                    }
+                } else {
+                    throw new Error("El archivo no es una plantilla o borrador válido.");
+                }
+                
+                if (firstContent) openReviewModal(firstContent, firstDifficulty);
+
+            } catch (error) {
+                showMessage(`Error al cargar: ${error.message}`, "error");
+                console.error("Error loading template/draft:", error);
+            } finally {
+                event.target.value = '';
+            }
+        };
+        reader.readAsText(file);
+    }
+    
+    document.addEventListener('DOMContentLoaded', () => {
+        // --- INICIO CAMBIO: Inicializamos el control de acceso general ---
+        initializeAccessControl();
+        // --- FIN CAMBIO ---
+
+        initializeMode(); loadProgress(); populateSubjects(); renderTeacherConfig(); populateDifficultySelect(statsDifficultySelect);
+        tabButtons.forEach(button => { button.addEventListener('click', () => { tabButtons.forEach(btn => btn.classList.remove('active')); tabContents.forEach(content => content.classList.remove('active')); button.classList.add('active'); document.getElementById(button.dataset.target).classList.add('active'); if(button.dataset.target === 'stats-tab') populateDifficultySelect(statsDifficultySelect); }); });
+        const teacherModeButton = document.getElementById('teacher-mode-button'); const passwordModalOverlay = document.getElementById('password-modal-overlay'); teacherModeButton.addEventListener('click', () => { if (document.body.classList.contains('teacher-mode-active')) { activateStudentMode(); showMessage('Has vuelto al modo Alumno.', 'info'); } else { passwordModalOverlay.style.display = 'flex'; document.getElementById('password-input').focus(); } });
+        document.getElementById('submit-password-button').addEventListener('click', checkPassword); document.getElementById('password-input').addEventListener('keyup', (e) => { if (e.key === 'Enter') checkPassword(); });
+        passwordModalOverlay.addEventListener('click', (e) => { if (e.target === passwordModalOverlay) { passwordModalOverlay.style.display = 'none'; document.getElementById('password-modal-feedback').textContent = ''; document.getElementById('password-input').value = ''; } });
+        levelSelect.addEventListener('change', populateSubjects); populateUniversitySubjectsButton.addEventListener('click', () => automateGetContents(false, false)); populateFpModulesButton.addEventListener('click', () => automateGetContents(false, false)); automateExhaustiveButton.addEventListener('click', () => automateGetContents(true, false));
+        document.getElementById('copy-student-contents-button').addEventListener('click', copyStudentContentsForTeacher); document.getElementById('add-manual-contents-button').addEventListener('click', () => { renderProgressGrid(); showMessage("Lista de contenidos actualizada.", "success"); });
+        document.getElementById('reset-button').addEventListener('click', () => { if (confirm("¿Estás seguro de que quieres limpiar todo el progreso y la configuración? Esta acción no se puede deshacer.")) { resetAppState(); localStorage.removeItem('progresoGuiadoData'); logActivity("Estado de la aplicación reiniciado."); saveProgress(); renderProgressGrid(); showMessage("Aplicación reiniciada.", "success"); } });
+        automateExercisesButton.addEventListener('click', () => { teacherCodeInput.value = ''; appState.professorConfig = null; renderProgressGrid(); showMessage("Modo automático activado.", "info"); });
+        teacherCodeInput.addEventListener('input', applyTeacherCode);
+        progressGrid.addEventListener('click', (e) => { if (e.target.classList.contains('level-button') && !e.target.disabled) { startQuiz(e.target.dataset.content, e.target.dataset.difficulty); } });
+        submitQuizAnswerButton.addEventListener('click', handleSubmitAnswer); nextQuizQuestionButton.addEventListener('click', handleNextQuestion);
+        document.getElementById('quiz-modal-overlay').addEventListener('click', (e) => { if (e.target === document.getElementById('quiz-modal-overlay')) closeQuizModal(); });
+        document.getElementById('save-progress-button').addEventListener('click', saveProgressToFile); document.getElementById('load-progress-button').addEventListener('click', () => document.getElementById('load-progress-input').click()); document.getElementById('load-progress-input').addEventListener('change', loadProgressFromFile);
+        document.getElementById('teacher-level').addEventListener('change', populateTeacherSubjects); document.getElementById('teacher-populate-university-subjects-button').addEventListener('click', () => automateGetContents(false, true)); document.getElementById('teacher-populate-fp-modules-button').addEventListener('click', () => automateGetContents(false, true)); document.getElementById('teacher-automate-exhaustive-get-contents-button').addEventListener('click', () => automateGetContents(true, true));
+        document.getElementById('copy-teacher-code-button').addEventListener('click', () => { const code = document.getElementById('output-teacher-code').value; if (code) navigator.clipboard.writeText(code).then(() => showMessage('¡Código copiado!', 'success')); });
+        document.getElementById('download-teacher-template-button').addEventListener('click', () => { const code = document.getElementById('output-teacher-code').value; if(!code) return; const data = JSON.parse(decodeURIComponent(atob(code))); const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(data, null, 2)); const downloadAnchorNode = document.createElement('a'); downloadAnchorNode.setAttribute("href", dataStr); downloadAnchorNode.setAttribute("download", "plantilla_progreso_guiado.json"); document.body.appendChild(downloadAnchorNode); downloadAnchorNode.click(); downloadAnchorNode.remove(); });
+        document.getElementById('start-template-creation-button').addEventListener('click', startTemplateCreationProcess);
+        document.getElementById('generate-dynamic-template-button').addEventListener('click', () => finalizeAndGenerateCode(false));
+        document.getElementById('load-fixed-template-button').addEventListener('click', () => document.getElementById('load-teacher-template-input').click());
+        document.getElementById('load-teacher-template-input').addEventListener('change', loadTeacherTemplateForEditing);
+        document.getElementById('generate-student-report-button').addEventListener('click', generateStudentReportCode);
+        document.getElementById('copy-student-report-button').addEventListener('click', () => { const code = document.getElementById('student-report-code').value; if (code) navigator.clipboard.writeText(code).then(() => showMessage('¡Código de reporte copiado!', 'success')); });
+        document.getElementById('load-student-data-button').addEventListener('click', loadAndDisplayStudentDataFromCode); document.getElementById('load-student-file-button').addEventListener('click', () => document.getElementById('load-student-file-input').click()); document.getElementById('load-student-file-input').addEventListener('change', loadAndDisplayStudentDataFromFile);
+        document.getElementById('difficulty-configs-container').addEventListener('click', (e) => { if (e.target.classList.contains('add-type-button')) addQuestionTypeRow(e.target.dataset.diff); if (e.target.classList.contains('remove-type-button') && e.target.parentElement.parentElement.childElementCount > 1) e.target.parentElement.remove(); });
+        
+        const reviewModal = document.getElementById('question-review-modal');
+        reviewModal.addEventListener('change', e => {
+            if (e.target.classList.contains('required-question-count-input')) {
+                const { content, difficulty, type } = e.target.dataset;
+                const newValue = parseInt(e.target.value);
+                appState.teacherTemplate.questionPool[content][difficulty].required[type] = newValue;
+                renderReviewQuestions();
+            } else if (e.target.type === 'checkbox' && e.target.closest('.review-question-item')) {
+                 handleReviewSelection(e);
+            }
+        });
+        reviewModal.addEventListener('click', e => {
+            const button = e.target.closest('button');
+            if (!button) return;
+            if (button.classList.contains('generate-section-questions-btn')) {
+                generateQuestionsForSection(button.dataset.content, button.dataset.difficulty, button);
+            } else if (button.classList.contains('btn-generate-missing')) {
+                generateMissingQuestions(button.dataset.content, button.dataset.difficulty, button.dataset.type, button.dataset.needed, button);
+            } else if (button.closest('.review-question-item-actions')) {
+                const actionButton = button.closest('.action-btn');
+                if(!actionButton) return;
+                const questionId = actionButton.dataset.questionId;
+                if (actionButton.classList.contains('edit')) openEditModal(questionId);
+                if (actionButton.classList.contains('discard')) {
+                    const { content, difficulty } = appState.teacherTemplate.currentReview;
+                    const pool = appState.teacherTemplate.questionPool[content][difficulty];
+                    pool.questions = pool.questions.filter(q => q.id !== questionId);
+                    pool.selected = pool.selected.filter(id => id !== questionId);
+                    renderReviewQuestions();
+                }
+                if (actionButton.classList.contains('regenerate')) openRegenerateModal(questionId);
+            }
+        });
+        document.getElementById('review-content-select').addEventListener('change', (e) => openReviewModal(e.target.value, document.getElementById('review-difficulty-select-nav').value));
+        document.getElementById('review-difficulty-select-nav').addEventListener('change', (e) => openReviewModal(document.getElementById('review-content-select').value, e.target.value));
+        document.getElementById('edit-question-form').addEventListener('submit', handleSaveEdit);
+        document.getElementById('confirm-regenerate-button').addEventListener('click', handleRegenerateQuestion);
+        document.getElementById('finalize-template-fixed-button').addEventListener('click', () => finalizeAndGenerateCode(true));
+        document.getElementById('save-draft-template-button').addEventListener('click', saveDraftTemplate);
+        const reviewModalOverlay = document.getElementById('question-review-modal-overlay');
+        document.getElementById('close-review-modal-button').addEventListener('click', () => reviewModalOverlay.style.display = 'none');
+        reviewModalOverlay.addEventListener('click', e => { if (e.target === reviewModalOverlay) reviewModalOverlay.style.display = 'none'; });
+
+        const statsChartCallback = newChart => { statsChart = newChart; };
+        statsDifficultySelect.addEventListener('change', () => renderStatsChart('stats-chart', getSelectedContents(), appState.progressData, appState.professorConfig, statsDifficultySelect.value, statsChart?.config?.type || 'radar', statsChartCallback)); setChartRadarButton.addEventListener('click', () => renderStatsChart('stats-chart', getSelectedContents(), appState.progressData, appState.professorConfig, statsDifficultySelect.value, 'radar', statsChartCallback)); setChartBarButton.addEventListener('click', () => renderStatsChart('stats-chart', getSelectedContents(), appState.progressData, appState.professorConfig, statsDifficultySelect.value, 'bar', statsChartCallback));
+        const revisionChartCallback = newChart => { revisionChart = newChart; };
+        revisionDifficultySelect.addEventListener('change', () => { if (loadedStudentData) { renderStatsChart('revision-chart-canvas', loadedStudentData.professorConfig.contents, loadedStudentData.progressData, loadedStudentData.professorConfig, revisionDifficultySelect.value, revisionChart?.config?.type || 'radar', revisionChartCallback); } });
+        document.getElementById('set-revision-chart-radar').addEventListener('click', () => { if (loadedStudentData) { renderStatsChart('revision-chart-canvas', loadedStudentData.professorConfig.contents, loadedStudentData.progressData, loadedStudentData.professorConfig, revisionDifficultySelect.value, 'radar', revisionChartCallback); } });
+        document.getElementById('set-revision-chart-bar').addEventListener('click', () => { if (loadedStudentData) { renderStatsChart('revision-chart-canvas', loadedStudentData.professorConfig.contents, loadedStudentData.progressData, loadedStudentData.professorConfig, revisionDifficultySelect.value, 'bar', revisionChartCallback); } });
+        document.getElementById('revision-progress-grid').addEventListener('click', e => { if (e.target.classList.contains('level-button')) { showRevisionQuizDetail(e.target.dataset.content, e.target.dataset.difficulty); } });
+        document.getElementById('revision-quiz-detail-modal-overlay').addEventListener('click', e => { if (e.target.id === 'revision-quiz-detail-modal-overlay') e.target.style.display = 'none'; });
+        document.getElementById('generate-ai-report-button').addEventListener('click', generateAIReport);
+        document.getElementById('include-activity-log-checkbox').addEventListener('change', toggleActivityLogInInstructions);
+        document.getElementById('print-report-button').addEventListener('click', () => window.print());
+    });
+</script>
+</body>
+</html>
