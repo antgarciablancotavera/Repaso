@@ -1,4 +1,3 @@
-```javascript
 // ======================================================
 // PANEL DE CONFIGURACIÓN DE CLAVES
 // Aquí puedes cambiar las contraseñas sin tocar el
@@ -14,4 +13,3 @@ window.APP_CONFIG = {
   // Cambia "PROFE_SECRETO" por la clave que desees para los profesores.
   TEACHER_PASSWORD: "PROFE_SECRETO"
 };
-```
